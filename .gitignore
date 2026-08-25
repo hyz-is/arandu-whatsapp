@@ -1,0 +1,28 @@
+# What never belongs in the repository.
+#
+# A package has no build output of its own -- `go get` compiles it in the
+# consumer's build -- so most of this is what the tools and the editors leave
+# behind.
+
+# Test and coverage output.
+*.test
+*.out
+coverage.*
+
+# Local module resolution while something in the graph is not published.
+go.work
+go.work.sum
+
+# Secrets. Nothing here reads one, and the rule stays so that the first file
+# that does is not the one that finds out.
+.env
+.env.*
+!.env.example
+
+# What the editors and the operating systems leave behind.
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

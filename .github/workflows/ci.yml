@@ -1,0 +1,132 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Not go-version-file: go.mod declares the MINIMUM language version,
+          # and setup-go would install exactly that -- a patch release whose
+          # standard library carries fixed vulnerabilities. "stable" is the
+          # version people actually run, which is what CI should test against.
+          go-version: stable
+
+      - name: gofmt
+        # Two filters, and neither is preference. gofmt is the only tool in the
+        # chain that ignores build tags, so it reads files the compiler
+        # deliberately excludes; testdata/ holds fixtures that are invalid on
+        # purpose. `go build`, `go vet` and `go test` skip both on their own.
+        run: |
+          unformatted=$(find . -name '*.go' -not -path '*/testdata/*' \
+                          -not -name '*.kyse.go' -exec gofmt -l {} +)
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: build
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      # configure:template-start
+      # The build tag keeps configure.go out of ./..., so nothing above has
+      # looked at it. Named directly, it is checked like any other file --
+      # otherwise the first person to run it is the one who finds out it does
+      # not compile.
+      - name: vet the configure command
+        run: go vet configure.go
+      # configure:template-end
+
+      - name: test
+        run: go test -race ./...
+
+  # configure:template-start
+  # The template configures cleanly, and what comes out passes the same gates.
+  #
+  # A skeleton that is green before configure.go runs and broken after is worse
+  # than no skeleton at all: the breakage is found by its first user, in a
+  # repository they have already started writing in.
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: configure a clean clone
+        run: |
+          git clone --no-hardlinks . "$RUNNER_TEMP/configured"
+          cd "$RUNNER_TEMP/configured"
+          go run ./configure.go --non-interactive \
+            --module-path github.com/acme/arandu-widget \
+            --module-slug widget \
+            --package-name Widget \
+            --author-name "Acme" \
+            --author-username acme
+
+      - name: it removed itself and left no placeholder behind
+        run: |
+          cd "$RUNNER_TEMP/configured"
+          if [ -f configure.go ]; then
+            echo "configure.go did not delete itself"
+            exit 1
+          fi
+          if grep -rn --exclude-dir=.git \
+               -e ':module_path' -e ':module_slug' -e ':package_name' \
+               -e ':author_name' -e ':author_username' \
+               -e 'Skeleton' -e 'skeleton' .; then
+            echo "a placeholder survived the run"
+            exit 1
+          fi
+
+      - name: it refuses a second run instead of corrupting the tree
+        run: |
+          cd "$RUNNER_TEMP/configured"
+          git checkout -- configure.go
+          before=$(find . -path ./.git -prune -o -type f -print | sort | xargs shasum | shasum)
+          if go run ./configure.go --non-interactive \
+               --module-path github.com/acme/arandu-widget \
+               --module-slug widget \
+               --package-name Widget \
+               --author-name "Acme" \
+               --author-username acme; then
+            echo "it ran a second time over a configured repository"
+            exit 1
+          fi
+          after=$(find . -path ./.git -prune -o -type f -print | sort | xargs shasum | shasum)
+          if [ "$before" != "$after" ]; then
+            echo "the refused run changed files anyway"
+            exit 1
+          fi
+          rm -f configure.go
+
+      - name: the four gates, on what came out
+        run: |
+          cd "$RUNNER_TEMP/configured"
+          unformatted=$(find . -name '*.go' -not -path '*/testdata/*' \
+                          -not -name '*.kyse.go' -exec gofmt -l {} +)
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+          go build ./...
+          go vet ./...
+          go test -race ./...
+  # configure:template-end
