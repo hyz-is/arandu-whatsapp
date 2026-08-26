@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The latest minor release of :package_name receives security fixes. Older minor
+The latest minor release of WhatsApp receives security fixes. Older minor
 releases do not: a published Go module version is immutable, so a fix is a new
 release rather than a moved tag.
 
@@ -10,7 +10,7 @@ release rather than a moved tag.
 
 Report it privately, through GitHub's advisory form:
 
-<https://github.com/:author_username/:module_slug/security/advisories/new>
+<https://github.com/hyz-is/arandu-whatsapp/security/advisories/new>
 
 Do not open a public issue and do not describe the problem in a pull request.
 A report that arrives in public is a report every reader of this repository can

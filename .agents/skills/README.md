@@ -15,30 +15,15 @@ names the situation you are in rather than the topic it covers.
 
 | skill | when it fires |
 | --- | --- |
-| `skeleton-policy` | opening an action, adding a repository method, or anything answering 403 |
-| `skeleton-module` | adding a route, a handler, a config field, a response field or a migration |
-| `skeleton-release` | the gates, the manifest, a dependency, a version, a tag |
-| `skeleton-package` | installing and wiring this package **into an application** |
+| `whatsapp-policy` | opening an action, adding a repository method, or anything answering 403 |
+| `whatsapp-module` | adding a route, a handler, a config field, a response field or a migration |
+| `whatsapp-release` | the gates, the manifest, a dependency, a version, a tag |
+| `whatsapp-package` | installing and wiring this package **into an application** |
 
-The last one has a different audience from the other three, and that is on
-purpose: it travels with the package so that an assistant working in somebody
-else's project — the one running `go get` — has the wiring, the migration step
-and the closed policy in front of it instead of guessing.
+The last one has a different audience from the other three: it travels with the
+package so an assistant installing it has the explicit wiring, `aru migrate`,
+typed role policy and lifecycle requirements in front of it.
 
-<!-- configure:template-start -->
-`skeleton-package` is also the one written as a template. It carries the
-`:module_path`, `:module_slug`, `:package_name`, `:author_name` and
-`:author_username` placeholders and the `Skeleton` identifier, and `configure.go`
-rewrites all six — in the contents *and* in the directory name, which is what
-keeps the frontmatter `name` and the directory in agreement.
-
-The other three are rewritten too, because their names carry the slug: the
-package that comes out of the template has `<slug>-policy`, `<slug>-module`,
-`<slug>-release` and `<slug>-package`. The prefix is the slug rather than the
-repository name for a mechanical reason — the slug is a value `configure.go`
-knows, and the repository name is not.
-
-<!-- configure:template-end -->
 ## Why these exist
 
 The audience of the first three is somebody changing the package. A model asked

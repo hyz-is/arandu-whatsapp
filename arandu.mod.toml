@@ -5,17 +5,17 @@
 # calls and then holds an HTTP client is rejected, which is what makes the
 # four lines below worth reading before installing anything.
 
-name = ":author_username/:module_slug"
+name = "hyz-is/arandu-whatsapp"
 framework = ">= 0.35"
-profiles = ["conventional", "performance"]
+profiles = ["conventional"]
 
 [permissions]
-# It answers requests and reads its own rows. Nothing leaves the process.
-network = false
-# It keeps no state outside the database.
-filesystem = false
-# It runs no other program.
-exec = false
-# module.go owns the skeletons table, so whoever installs this has to run
-# `aru migrate`. Declaring it is how they find that out before deploying.
+# WhatsApp connections and configured webhook deliveries leave the process.
+network = true
+# Multipart media and transcoding use bounded temporary files.
+filesystem = true
+# Audio and thumbnail processing invoke the configured ffmpeg/ffprobe binaries.
+exec = true
+# The module owns its domain tables and delegates the WhatsMeow store upgrade,
+# so installers have to run `aru migrate` before starting it.
 migrations = true

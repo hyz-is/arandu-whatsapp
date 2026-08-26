@@ -1,0 +1,380 @@
+package whatsapp
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/arandu-io/framework/data"
+	"github.com/arandu-io/framework/security"
+	"github.com/arandu-io/hesape/database"
+	"go.mau.fi/whatsmeow"
+
+	"github.com/hyz-is/arandu-whatsapp/internal/authz"
+	"github.com/hyz-is/arandu-whatsapp/internal/config"
+	"github.com/hyz-is/arandu-whatsapp/internal/database/repository"
+	"github.com/hyz-is/arandu-whatsapp/internal/database/types"
+)
+
+func TestConsumeQRCodeChannelReturnsFirstQRAndKeepsConsuming(t *testing.T) {
+	svc, session, managed, qrChannel, firstQR, firstErr := newQRConsumerTest(t, 5)
+
+	qrChannel <- whatsmeow.QRChannelItem{Event: whatsmeow.QRChannelEventCode, Code: "first", Timeout: time.Minute}
+	result := readFirstQR(t, firstQR)
+	if result.Count != 1 || result.Code != "first" || !strings.HasPrefix(result.Base64, "data:image/png;base64,") {
+		t.Fatalf("unexpected first QR result %#v", result)
+	}
+	if current := session.getCurrentQR(); current == nil || current.Code != "first" {
+		t.Fatal("expected current QR to be stored in session")
+	}
+
+	qrChannel <- whatsmeow.QRChannelItem{Event: whatsmeow.QRChannelEventCode, Code: "second", Timeout: time.Minute}
+	qrChannel <- whatsmeow.QRChannelSuccess
+	assertNoFirstError(t, firstErr)
+	waitForPairingRemoved(t, svc, managed.InstanceID)
+
+	if current := session.getCurrentQR(); current == nil || current.Code != "second" {
+		t.Fatal("expected current QR to be updated by later QR events")
+	}
+	if got := svc.instances.(*fakeInstanceRepository).lastStatus(); got != types.InstanceConnectionStatusOnline {
+		t.Fatalf("expected online after success, got %s", got)
+	}
+}
+
+func TestConsumeQRCodeChannelTimeoutAfterFirstQRDoesNotBlockFirstError(t *testing.T) {
+	svc, _, managed, qrChannel, firstQR, firstErr := newQRConsumerTest(t, 5)
+
+	qrChannel <- whatsmeow.QRChannelItem{Event: whatsmeow.QRChannelEventCode, Code: "first", Timeout: time.Minute}
+	_ = readFirstQR(t, firstQR)
+	qrChannel <- whatsmeow.QRChannelTimeout
+	assertNoFirstError(t, firstErr)
+	waitForPairingRemoved(t, svc, managed.InstanceID)
+
+	if got := svc.instances.(*fakeInstanceRepository).lastStatus(); got != types.InstanceConnectionStatusConnectionTimeout {
+		t.Fatalf("expected timeout status, got %s", got)
+	}
+}
+
+func TestConsumeQRCodeChannelSuccessKeepsManagedContextAlive(t *testing.T) {
+	qr, err := NewQRGenerator("#ffffff", "#198754")
+	if err != nil {
+		t.Fatalf("NewQRGenerator: %v", err)
+	}
+	svc := &Service{
+		config: config.WhatsAppConfig{
+			QRCodeLimit:          5,
+			QRCodeExpirationTime: time.Second,
+			PairingTimeout:       time.Minute,
+		},
+		instances:     &fakeInstanceRepository{},
+		hub:           NewClientHub(),
+		lock:          &fakeConnectionLock{},
+		qr:            qr,
+		logger:        testSlog(),
+		passkeyClient: newWhatsmeowPasskeyClient,
+		pairings:      newPairingManager(),
+	}
+	pairingCtx, pairingCancel := context.WithCancel(context.Background())
+	instanceCtx, instanceCancel := context.WithCancel(context.Background())
+	t.Cleanup(instanceCancel)
+	session := &pairingSession{cancel: pairingCancel, ctx: pairingCtx, startedAt: time.Now()}
+	managed := &ManagedWhatsAppClient{
+		InstanceID:      "1",
+		InstanceName:    "beplus",
+		RuntimeGrant:    eventRuntimeGrant(),
+		Context:         instanceCtx,
+		Cancel:          instanceCancel,
+		ConnectedSignal: make(chan struct{}),
+	}
+	if !svc.pairings.add(managed.InstanceID, session) {
+		t.Fatal("failed to add pairing session")
+	}
+	if err := svc.hub.Register(managed); err != nil {
+		t.Fatalf("register managed client: %v", err)
+	}
+	qrChannel := make(chan whatsmeow.QRChannelItem, 1)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.consumeQRCodeChannel(pairingCtx, pairingCancel, session, managed, qrChannel, nil, nil)
+	}()
+
+	qrChannel <- whatsmeow.QRChannelSuccess
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for QR consumer")
+	}
+	select {
+	case <-instanceCtx.Done():
+		t.Fatal("managed session context must stay alive after successful QR pairing")
+	default:
+	}
+}
+
+func TestConsumeQRCodeChannelErrorBeforeFirstQRReturnsRealError(t *testing.T) {
+	svc, _, managed, qrChannel, _, firstErr := newQRConsumerTest(t, 5)
+
+	cause := errors.New("pair rejected")
+	qrChannel <- whatsmeow.QRChannelItem{Event: whatsmeow.QRChannelEventError, Error: cause}
+
+	err := readFirstError(t, firstErr)
+	if !errors.Is(err, ErrPairingFailed) || !errors.Is(err, cause) {
+		t.Fatalf("expected wrapped pairing error, got %v", err)
+	}
+	waitForPairingRemoved(t, svc, managed.InstanceID)
+
+	repo := svc.instances.(*fakeInstanceRepository)
+	if got := repo.lastStatus(); got != types.InstanceConnectionStatusConnectionError {
+		t.Fatalf("expected connection error, got %s", got)
+	}
+	if repo.lastError() != cause.Error() {
+		t.Fatalf("expected stored cause %q, got %q", cause.Error(), repo.lastError())
+	}
+}
+
+func TestConsumeQRCodeChannelClosedBeforeFirstQRReturnsClosedError(t *testing.T) {
+	svc, _, managed, qrChannel, _, firstErr := newQRConsumerTest(t, 5)
+
+	close(qrChannel)
+
+	err := readFirstError(t, firstErr)
+	if !errors.Is(err, ErrQRChannelClosed) {
+		t.Fatalf("expected ErrQRChannelClosed, got %v", err)
+	}
+	waitForPairingRemoved(t, svc, managed.InstanceID)
+	if got := svc.instances.(*fakeInstanceRepository).lastStatus(); got != types.InstanceConnectionStatusConnectionError {
+		t.Fatalf("expected connection error, got %s", got)
+	}
+}
+
+func TestConsumeQRCodeChannelClientOutdatedMapsStatus(t *testing.T) {
+	svc, _, managed, qrChannel, _, firstErr := newQRConsumerTest(t, 5)
+
+	qrChannel <- whatsmeow.QRChannelClientOutdated
+
+	err := readFirstError(t, firstErr)
+	if !errors.Is(err, ErrClientOutdated) {
+		t.Fatalf("expected ErrClientOutdated, got %v", err)
+	}
+	waitForPairingRemoved(t, svc, managed.InstanceID)
+	if got := svc.instances.(*fakeInstanceRepository).lastStatus(); got != types.InstanceConnectionStatusClientOutdated {
+		t.Fatalf("expected client_outdated, got %s", got)
+	}
+}
+
+func newQRConsumerTest(t *testing.T, limit int) (*Service, *pairingSession, *ManagedWhatsAppClient, chan whatsmeow.QRChannelItem, chan QRCodeConnectionResult, chan error) {
+	t.Helper()
+	qr, err := NewQRGenerator("#ffffff", "#198754")
+	if err != nil {
+		t.Fatalf("NewQRGenerator: %v", err)
+	}
+	appCtx, appCancel := context.WithCancel(context.Background())
+	t.Cleanup(appCancel)
+	svc := &Service{
+		config: config.WhatsAppConfig{
+			QRCodeLimit:          limit,
+			QRCodeExpirationTime: time.Second,
+			PairingTimeout:       time.Minute,
+		},
+		instances:     &fakeInstanceRepository{},
+		hub:           NewClientHub(),
+		lock:          &fakeConnectionLock{},
+		qr:            qr,
+		logger:        testSlog(),
+		passkeyClient: newWhatsmeowPasskeyClient,
+		appCtx:        appCtx,
+		appCancel:     appCancel,
+		pairings:      newPairingManager(),
+	}
+	ctx, cancel := context.WithCancel(appCtx)
+	session := &pairingSession{cancel: cancel, ctx: ctx, startedAt: time.Now()}
+	managed := &ManagedWhatsAppClient{
+		InstanceID:      "1",
+		InstanceName:    "beplus",
+		RuntimeGrant:    eventRuntimeGrant(),
+		Context:         ctx,
+		Cancel:          cancel,
+		ConnectedSignal: make(chan struct{}),
+	}
+	if !svc.pairings.add(managed.InstanceID, session) {
+		t.Fatal("failed to add pairing session")
+	}
+	if err := svc.hub.Register(managed); err != nil {
+		t.Fatalf("register managed client: %v", err)
+	}
+	qrChannel := make(chan whatsmeow.QRChannelItem, 8)
+	firstQR := make(chan QRCodeConnectionResult, 1)
+	firstErr := make(chan error, 1)
+	go svc.consumeQRCodeChannel(ctx, cancel, session, managed, qrChannel, firstQR, firstErr)
+	return svc, session, managed, qrChannel, firstQR, firstErr
+}
+
+func readFirstQR(t *testing.T, ch <-chan QRCodeConnectionResult) QRCodeConnectionResult {
+	t.Helper()
+	select {
+	case result := <-ch:
+		return result
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first QR")
+		return QRCodeConnectionResult{}
+	}
+}
+
+func readFirstError(t *testing.T, ch <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first error")
+		return nil
+	}
+}
+
+func assertNoFirstError(t *testing.T, ch <-chan error) {
+	t.Helper()
+	select {
+	case err := <-ch:
+		t.Fatalf("unexpected first error: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func waitForPairingRemoved(t *testing.T, svc *Service, instanceID string) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for pairing cleanup")
+		case <-ticker.C:
+			if !svc.pairings.exists(instanceID) {
+				return
+			}
+		}
+	}
+}
+
+func pairingTestGrant() security.Grant {
+	return security.SystemGrant(authz.ActionConnectionPair, "acme")
+}
+
+type fakeInstanceRepository struct {
+	mu      sync.Mutex
+	updates []types.UpdateConnectionStateInput
+	found   types.InstanceRecord
+	findErr error
+	deleted bool
+}
+
+func (r *fakeInstanceRepository) Create(context.Context, security.Grant, types.CreateInstanceInput) (types.InstanceRecord, error) {
+	return types.InstanceRecord{}, nil
+}
+func (r *fakeInstanceRepository) FindByName(context.Context, security.Grant, string) (types.InstanceRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.findErr != nil {
+		return types.InstanceRecord{}, r.findErr
+	}
+	if r.found.Instance.Name != "" {
+		return r.found, nil
+	}
+	return types.InstanceRecord{}, repository.ErrInstanceNotFound
+}
+func (r *fakeInstanceRepository) FindByID(context.Context, security.Grant, int64) (types.InstanceRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.findErr != nil {
+		return types.InstanceRecord{}, r.findErr
+	}
+	if r.found.Instance.ID != 0 {
+		return r.found, nil
+	}
+	return types.InstanceRecord{}, repository.ErrInstanceNotFound
+}
+func (r *fakeInstanceRepository) ListPage(context.Context, security.Grant, data.Query, *string) (database.Page[types.InstanceRecord], error) {
+	return database.Page[types.InstanceRecord]{}, nil
+}
+func (r *fakeInstanceRepository) FetchDetailsByName(context.Context, security.Grant, string) (types.InstanceDetails, error) {
+	return types.InstanceDetails{}, nil
+}
+func (r *fakeInstanceRepository) FindAutoConnectInstances(context.Context, security.Grant) ([]types.Instance, error) {
+	return nil, nil
+}
+func (r *fakeInstanceRepository) Update(context.Context, security.Grant, int64, types.UpdateInstanceInput) (types.InstanceRecord, error) {
+	return types.InstanceRecord{}, nil
+}
+
+func (r *fakeInstanceRepository) UpdateStatus(_ context.Context, _ security.Grant, _ int64, status types.InstanceStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.found.Instance.Status = status
+	return nil
+}
+func (r *fakeInstanceRepository) UpdateConnectionState(_ context.Context, _ security.Grant, input types.UpdateConnectionStateInput) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updates = append(r.updates, input)
+	return nil
+}
+func (r *fakeInstanceRepository) SaveWhatsAppDevice(context.Context, security.Grant, types.SaveWhatsAppDeviceInput) error {
+	return nil
+}
+func (r *fakeInstanceRepository) ClearWhatsAppDevice(context.Context, security.Grant, int64) error {
+	return nil
+}
+func (r *fakeInstanceRepository) UpdateProfilePicture(context.Context, security.Grant, int64, *string, *string) error {
+	return nil
+}
+func (r *fakeInstanceRepository) TryAcquireConnectionLock(context.Context, security.Grant, string) (bool, error) {
+	return true, nil
+}
+func (r *fakeInstanceRepository) ReleaseConnectionLock(context.Context, security.Grant, string) error {
+	return nil
+}
+func (r *fakeInstanceRepository) EnsureDeletable(context.Context, security.Grant, int64) error {
+	return nil
+}
+func (r *fakeInstanceRepository) Delete(context.Context, security.Grant, int64, bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deleted = true
+	return nil
+}
+
+func (r *fakeInstanceRepository) lastStatus() types.InstanceConnectionStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := len(r.updates) - 1; i >= 0; i-- {
+		if r.updates[i].ConnectionStatus != nil {
+			return *r.updates[i].ConnectionStatus
+		}
+	}
+	return ""
+}
+
+func (r *fakeInstanceRepository) lastError() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := len(r.updates) - 1; i >= 0; i-- {
+		if r.updates[i].LastConnectionError.Set && r.updates[i].LastConnectionError.Value != nil {
+			return *r.updates[i].LastConnectionError.Value
+		}
+	}
+	return ""
+}
+
+type fakeConnectionLock struct{}
+
+func (l *fakeConnectionLock) TryAcquire(context.Context, security.Grant, string) (bool, error) {
+	return true, nil
+}
+func (l *fakeConnectionLock) Release(context.Context, security.Grant, string) error { return nil }

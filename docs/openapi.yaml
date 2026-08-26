@@ -1,0 +1,2475 @@
+openapi: 3.0.3
+info:
+  title: Arandu WhatsApp Module API
+  version: unreleased
+  description: Canonical HTTP contract exposed by the Arandu WhatsApp module.
+servers:
+  - url: /whatsapp
+security:
+  - aranduSession: []
+paths:
+  /instances/{instance}/messages/text:
+    post:
+      operationId: whatsapp.messages.text
+      summary: Send a text message
+      description: Sends synchronously unless options.mentionAll is true.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendTextRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/link:
+    post:
+      operationId: whatsapp.messages.link
+      summary: Send a link message
+      description: Supports options.mentionAll.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendLinkRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/media:
+    post:
+      operationId: whatsapp.messages.media
+      summary: Send media from URL
+      description: Supports image, document, video, audio and ptv. Supports options.mentionAll.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMediaRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/media/file:
+    post:
+      operationId: whatsapp.messages.media.file
+      summary: Send media from multipart file upload
+      description: Uses multipart field attachment. Supports options.mentionAll through multipart form fields.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SendMediaFileRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/audio:
+    post:
+      operationId: whatsapp.messages.audio
+      summary: Send WhatsApp PTT audio from URL
+      description: Downloads and prepares audio as WhatsApp PTT. Supports options.mentionAll.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendWhatsAppAudioRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/audio/file:
+    post:
+      operationId: whatsapp.messages.audio.file
+      summary: Send WhatsApp PTT audio from multipart file upload
+      description: Uses multipart field attachment. Supports options.mentionAll through multipart form fields.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SendWhatsAppAudioFileRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/contact:
+    post:
+      operationId: whatsapp.messages.contact
+      summary: Send one or more contact cards
+      description: Supports quoted message, delay, presence, external attributes and options.mentionAll.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendContactRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/location:
+    post:
+      operationId: whatsapp.messages.location
+      summary: Send a location
+      description: Supports quoted message, delay, presence, external attributes and options.mentionAll.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendLocationRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/reaction:
+    post:
+      operationId: whatsapp.messages.reaction
+      summary: Send a reaction to an existing message
+      description: Does not support options.mentionAll because ReactionMessage has no ContextInfo.MentionedJID.
+      security:
+        - aranduSession: []
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendReactionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageSent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances:
+    post:
+      operationId: whatsapp.instances.store
+      summary: Create a WhatsApp instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInstanceRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/InstanceCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: whatsapp.instances.index
+      summary: List instances in the configured tenant
+      parameters:
+        - name: instanceName
+          in: query
+          schema:
+            type: string
+            maxLength: 255
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 200
+        - name: cursor
+          in: query
+          description: Opaque cursor returned as nextCursor by the previous page.
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/InstanceList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /instances/{instance}:
+    parameters:
+      - $ref: '#/components/parameters/InstanceName'
+    get:
+      operationId: whatsapp.instances.show
+      summary: Find an instance by name
+      responses:
+        '200':
+          $ref: '#/components/responses/InstanceFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: whatsapp.instances.destroy
+      summary: Delete an instance
+      parameters:
+        - name: force
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          $ref: '#/components/responses/InstanceDeleted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/connection/qr:
+    post:
+      operationId: whatsapp.connection.qr
+      summary: Start QR pairing
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      responses:
+        '200':
+          $ref: '#/components/responses/QRCodeConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/connection/phone:
+    post:
+      operationId: whatsapp.connection.phone
+      summary: Start phone-code pairing
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhonePairingRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/PhonePairing'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/connection/passkey/challenge:
+    post:
+      operationId: whatsapp.connection.passkey.challenge
+      summary: Obtain the active WebAuthn challenge
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      responses:
+        '200':
+          $ref: '#/components/responses/PasskeyChallenge'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/connection/passkey/assertion:
+    post:
+      operationId: whatsapp.connection.passkey.assertion
+      summary: Submit a WebAuthn assertion
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyAssertionRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/PasskeyAssertionAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/connection:
+    parameters:
+      - $ref: '#/components/parameters/InstanceName'
+    get:
+      operationId: whatsapp.connection.show
+      summary: Get connection state
+      responses:
+        '200':
+          $ref: '#/components/responses/ConnectionState'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: whatsapp.connection.destroy
+      summary: Log out and remove the active WhatsApp session
+      responses:
+        '200':
+          $ref: '#/components/responses/Logout'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/webhook:
+    parameters:
+      - $ref: '#/components/parameters/InstanceName'
+    put:
+      operationId: whatsapp.webhook.update
+      summary: Create or update the instance webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetWebhookRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Webhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: whatsapp.webhook.show
+      summary: Get the instance webhook
+      responses:
+        '200':
+          $ref: '#/components/responses/Webhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /instances/{instance}/messages/search:
+    post:
+      operationId: whatsapp.messages.index
+      summary: Search persisted messages
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageSearchRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /instances/{instance}/messages/read:
+    patch:
+      operationId: whatsapp.messages.read
+      summary: Mark persisted WhatsApp messages as read
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadMessagesRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessagesRead'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/{message}:
+    parameters:
+      - $ref: '#/components/parameters/InstanceName'
+      - $ref: '#/components/parameters/Message'
+    delete:
+      operationId: whatsapp.messages.destroy
+      summary: Delete a message by positive local numeric ID
+      responses:
+        '204':
+          description: Message deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    put:
+      operationId: whatsapp.messages.update
+      summary: Edit an outgoing message by local ID or WhatsApp key ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditMessageRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MessageFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/messages/media/download:
+    post:
+      operationId: whatsapp.messages.media.download
+      summary: Download message media
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+        - name: binary
+          in: query
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaDownloadRequest'
+      responses:
+        '200':
+          description: Raw media when binary=true; otherwise multipart metadata and file.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  mediaType:
+                    type: string
+                  fileName:
+                    type: string
+                  size:
+                    type: string
+                    description: JSON-encoded size metadata carried as a multipart text field.
+                  mimetype:
+                    type: string
+                  file:
+                    type: string
+                    format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/contacts/check:
+    post:
+      operationId: whatsapp.contacts.check
+      summary: Check WhatsApp registration for up to 100 numbers
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactsCheckRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ContactsChecked'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/contacts/profile-picture:
+    post:
+      operationId: whatsapp.contacts.profile-picture
+      summary: Fetch a profile picture URL
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfilePictureRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProfilePicture'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/chats/archive:
+    put:
+      operationId: whatsapp.chats.archive
+      summary: Archive or unarchive a chat
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveChatRequest'
+      responses:
+        '204':
+          description: Chat state updated.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/calls/reject:
+    post:
+      operationId: whatsapp.calls.reject
+      summary: Reject an incoming call
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectCallRequest'
+      responses:
+        '204':
+          description: Call rejected.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/groups:
+    post:
+      operationId: whatsapp.groups.store
+      summary: Create a WhatsApp group
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/GroupInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/groups/{group}/picture:
+    put:
+      operationId: whatsapp.groups.picture.update
+      summary: Update a group picture
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+        - $ref: '#/components/parameters/Group'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGroupPictureRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/GroupInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/groups/{group}/invite:
+    parameters:
+      - $ref: '#/components/parameters/InstanceName'
+      - $ref: '#/components/parameters/Group'
+    get:
+      operationId: whatsapp.groups.invite.show
+      summary: Get the current group invite code
+      responses:
+        '200':
+          $ref: '#/components/responses/GroupInvite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      operationId: whatsapp.groups.invite.destroy
+      summary: Revoke the current group invite code
+      responses:
+        '200':
+          description: Invite revoked; empty body.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/groups/{group}/participants:
+    patch:
+      operationId: whatsapp.groups.participants.update
+      summary: Add, remove, promote or demote group participants
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+        - $ref: '#/components/parameters/Group'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateParticipantsRequest'
+      responses:
+        '200':
+          description: Participants updated; empty body.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /instances/{instance}/groups/{group}:
+    delete:
+      operationId: whatsapp.groups.leave
+      summary: Leave a group
+      parameters:
+        - $ref: '#/components/parameters/InstanceName'
+        - $ref: '#/components/parameters/Group'
+      responses:
+        '200':
+          description: Group left; empty body.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  securitySchemes:
+    aranduSession:
+      type: apiKey
+      in: cookie
+      name: arandu_session
+      description: Session issued by the host Arandu application. Legacy Bearer tokens are ignored.
+  parameters:
+    InstanceName:
+      name: instance
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    Group:
+      name: group
+      in: path
+      required: true
+      schema:
+        type: string
+        description: WhatsApp group JID.
+    Message:
+      name: message
+      in: path
+      required: true
+      schema:
+        type: string
+        description: Positive local ID for DELETE; local ID or WhatsApp key ID for PUT.
+  responses:
+    InstanceDeleted:
+      description: Instance and owned state deleted.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InstanceDeletedEnvelope'
+    QRCodeConnection:
+      description: QR pairing state and current code.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QRCodeConnectionEnvelope'
+    PhonePairing:
+      description: Phone pairing code created.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PhonePairingEnvelope'
+    PasskeyChallenge:
+      description: Active WebAuthn challenge.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PasskeyChallengeEnvelope'
+    PasskeyAssertionAccepted:
+      description: WebAuthn assertion accepted for WhatsApp confirmation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PasskeyAssertionEnvelope'
+    ConnectionState:
+      description: Current WhatsApp connection state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConnectionStateEnvelope'
+    Logout:
+      description: WhatsApp session logged out.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LogoutEnvelope'
+    Webhook:
+      description: Instance webhook configuration.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/WebhookEnvelope'
+    MessageFound:
+      description: Persisted message.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageEnvelope'
+    MessageList:
+      description: Page of persisted messages and updates.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageListEnvelope'
+    MessagesRead:
+      description: Messages marked as read.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessagesReadEnvelope'
+    ContactsChecked:
+      description: WhatsApp registration results.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ContactsEnvelope'
+    ProfilePicture:
+      description: Profile picture URL, or null when none is set.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProfilePictureEnvelope'
+    GroupInfo:
+      description: WhatsApp group information.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GroupInfoEnvelope'
+    GroupInvite:
+      description: WhatsApp group invitation code.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GroupInviteEnvelope'
+    InstanceCreated:
+      description: Instance created.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InstanceEnvelope'
+    InstanceFound:
+      description: Instance found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InstanceEnvelope'
+    InstanceList:
+      description: Tenant-scoped instance list.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InstanceCollectionEnvelope'
+    Forbidden:
+      description: Session, tenant scope or configured role refused the action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            data:
+              statusCode: 403
+              error: forbidden
+              messages:
+                - Forbidden
+    NotFound:
+      description: Requested tenant-scoped resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Current connection, pairing or dependency state conflicts with the request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Gone:
+      description: Ephemeral pairing state expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnprocessableEntity:
+      description: The input was understood but cannot be applied.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    MessageSent:
+      description: Message sent synchronously and persisted.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageEnvelope'
+    Accepted:
+      description: Durable snapshot and native database job committed for asynchronous mentionAll processing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProcessingAcceptedEnvelope'
+          example:
+            data:
+              statusCode: 202
+              status: processing
+              message: A mensagem foi aceita e esta sendo processada.
+              processId: 019f4ec1-f9b1-7c33-a4ef-d47715cb29e4
+              instanceName: beplus
+    BadRequest:
+      description: Invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            mentionAllRequiresGroup:
+              value:
+                data:
+                  statusCode: 400
+                  error: bad-request
+                  code: MENTION_ALL_REQUIRES_GROUP
+                  messages:
+                    - mention all requires group
+            mentionAllUnsupported:
+              value:
+                data:
+                  statusCode: 400
+                  error: bad-request
+                  code: MENTION_ALL_NOT_SUPPORTED_FOR_MESSAGE_TYPE
+                  messages:
+                    - mention all is not supported for message type
+    ServiceUnavailable:
+      description: WhatsApp or another required upstream service is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RequestTimeout:
+      description: QR pairing timed out before a code was available.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotAcceptable:
+      description: A dependent lookup or persistence operation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    PayloadTooLarge:
+      description: JSON, multipart or downloaded media exceeded the configured limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnsupportedMediaType:
+      description: The uploaded or downloaded media type is unsupported.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: Internal failure. Unknown errors are rendered by the host framework and do not promise the module ErrorEnvelope.
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/ErrorResponse'
+    InstanceEnvelope:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Instance'
+    InstanceCollectionEnvelope:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - items
+            - perPage
+            - nextCursor
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Instance'
+            perPage:
+              type: integer
+              minimum: 1
+              maximum: 200
+            nextCursor:
+              type: string
+              nullable: true
+    CreateInstanceRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Generated when omitted or blank.
+        description:
+          type: string
+          maxLength: 255
+          nullable: true
+        externalAttributes:
+          type: object
+          additionalProperties: true
+    PhonePairingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - phoneNumber
+      properties:
+        phoneNumber:
+          type: string
+          minLength: 8
+          maxLength: 32
+    Instance:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - status
+        - connectionStatus
+        - ownerJid
+        - profilePicUrl
+        - whatsappOwnerJid
+        - whatsappPhoneNumber
+        - lastConnectedAt
+        - lastDisconnectedAt
+        - connectionAttempts
+        - createdAt
+        - updatedAt
+        - externalAttributes
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [ONLINE, OFFLINE]
+        connectionStatus:
+          type: string
+          enum: [offline, connecting, qr_code, pairing_code, pairing, online, reconnecting, disconnected, connection_timeout, logged_out, session_missing, stream_replaced, keepalive_timeout, client_outdated, temporary_ban, connection_error]
+        ownerJid:
+          type: string
+          nullable: true
+        profilePicUrl:
+          type: string
+          nullable: true
+        whatsappOwnerJid:
+          type: string
+          nullable: true
+        whatsappPhoneNumber:
+          type: string
+          nullable: true
+        lastConnectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastDisconnectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        connectionAttempts:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        externalAttributes:
+          type: object
+          additionalProperties: true
+    PasskeyAssertionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - assertion
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        assertion:
+          type: object
+          additionalProperties: false
+          required: [id, rawId, type, response]
+          properties:
+            id:
+              type: string
+              minLength: 1
+            rawId:
+              type: string
+              minLength: 1
+              description: Unpadded base64url credential ID.
+            type:
+              type: string
+              enum: [public-key]
+            response:
+              type: object
+              additionalProperties: false
+              required: [clientDataJSON, authenticatorData, signature]
+              properties:
+                clientDataJSON:
+                  type: string
+                  minLength: 1
+                authenticatorData:
+                  type: string
+                  minLength: 1
+                signature:
+                  type: string
+                  minLength: 1
+                userHandle:
+                  type: string
+                  nullable: true
+    SetWebhookRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: '^https?://'
+          maxLength: 500
+        enabled:
+          type: boolean
+          default: true
+        events:
+          allOf:
+            - $ref: '#/components/schemas/WebhookEvents'
+          description: Supported event flags. Omission preserves flags; an empty object clears them; null is invalid.
+    WebhookEvents:
+      type: object
+      additionalProperties: false
+      properties:
+        qrcodeUpdated: {type: boolean}
+        historySync: {type: boolean}
+        messagesUpsert: {type: boolean}
+        messagesUpdated: {type: boolean}
+        messagesDeleted: {type: boolean}
+        messagesStarred: {type: boolean}
+        messagesUndecryptable: {type: boolean}
+        sendMessage: {type: boolean}
+        contactsUpsert: {type: boolean}
+        contactsUpdated: {type: boolean}
+        chatsUpdated: {type: boolean}
+        chatsDeleted: {type: boolean}
+        presenceUpdated: {type: boolean}
+        groupsUpsert: {type: boolean}
+        groupsUpdated: {type: boolean}
+        groupsParticipantsUpdated: {type: boolean}
+        connectionUpdated: {type: boolean}
+        statusInstance: {type: boolean}
+        newsLetter: {type: boolean}
+        callUpsert: {type: boolean}
+        labelsAssociation: {type: boolean}
+        labelsEdit: {type: boolean}
+        profilePictureUpdated: {type: boolean}
+        userAboutUpdated: {type: boolean}
+        identityUpdated: {type: boolean}
+        mediaRetry: {type: boolean}
+        settingsUpdated: {type: boolean}
+    MessageSearchRequest:
+      type: object
+      properties:
+        where:
+          $ref: '#/components/schemas/MessageSearchWhere'
+        offset:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+          default: 20
+        page:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 1
+    MessageSearchWhere:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {type: integer, format: int64, minimum: 1}
+        keyid: {type: string}
+        keyId: {type: string}
+        keyRemoteJid: {type: string}
+        keyFromMe:
+          oneOf:
+            - {type: boolean}
+            - {type: string, enum: ['true', 'false']}
+        messageType: {type: string}
+        device: {type: string, enum: [ios, android, web, unknown, desktop]}
+        messageStatus: {type: string}
+        messageTimestampGte: {type: integer, format: int32, minimum: 0}
+        messageTimestampLte: {type: integer, format: int32, minimum: 0}
+    ReadMessagesRequest:
+      type: object
+      description: "Use exactly one mode: persisted ids, or sender plus chat plus WhatsApp messageIds."
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 2147483647
+        sender:
+          type: string
+        chat:
+          type: string
+        messageIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+      oneOf:
+        - required: [ids]
+          not:
+            anyOf:
+              - required: [sender]
+              - required: [chat]
+              - required: [messageIds]
+        - required: [sender, chat, messageIds]
+          not:
+            required: [ids]
+    EditMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 65536
+    MediaDownloadRequest:
+      type: object
+      additionalProperties: false
+      description: "Exactly one mode is accepted: id, keyId, or messageType plus content."
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2147483647
+        keyId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        messageType:
+          type: string
+          enum: [imageMessage, videoMessage, documentMessage, stickerMessage, audioMessage]
+        content:
+          type: object
+          additionalProperties: true
+      oneOf:
+        - required: [id]
+          not:
+            anyOf:
+              - required: [keyId]
+              - required: [messageType]
+              - required: [content]
+        - required: [keyId]
+          not:
+            anyOf:
+              - required: [id]
+              - required: [messageType]
+              - required: [content]
+        - required: [messageType, content]
+          not:
+            required: [id]
+    ContactsCheckRequest:
+      type: object
+      required:
+        - numbers
+      properties:
+        numbers:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+    ProfilePictureRequest:
+      type: object
+      description: Exactly one recipient alias is required.
+      properties:
+        number:
+          type: string
+          minLength: 1
+        chat:
+          type: string
+          minLength: 1
+        recipient:
+          type: string
+          minLength: 1
+      oneOf:
+        - required: [number]
+          not:
+            anyOf:
+              - required: [chat]
+              - required: [recipient]
+        - required: [chat]
+          not:
+            anyOf:
+              - required: [number]
+              - required: [recipient]
+        - required: [recipient]
+          not:
+            anyOf:
+              - required: [number]
+              - required: [chat]
+    ArchiveChatRequest:
+      type: object
+      required:
+        - lastMessage
+        - archive
+      properties:
+        archive:
+          type: boolean
+        lastMessage:
+          type: object
+          required:
+            - key
+          properties:
+            key:
+              type: object
+              required:
+                - remoteJid
+                - fromMe
+                - id
+              properties:
+                remoteJid:
+                  type: string
+                  minLength: 1
+                fromMe:
+                  type: boolean
+                id:
+                  type: string
+                  minLength: 1
+    RejectCallRequest:
+      type: object
+      required:
+        - callId
+        - callFrom
+      properties:
+        callId:
+          type: string
+          minLength: 1
+        callFrom:
+          type: string
+          minLength: 1
+          description: WhatsApp JID of the caller.
+    CreateGroupRequest:
+      type: object
+      required:
+        - subject
+        - participants
+      properties:
+        subject:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        participants:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+            minLength: 1
+    UpdateGroupPictureRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - image
+      properties:
+        image:
+          type: string
+          format: uri
+          pattern: '^https?://'
+          description: Public HTTP(S) image URL; downloads larger than 16 MiB are rejected.
+    UpdateParticipantsRequest:
+      type: object
+      required:
+        - action
+        - participants
+      properties:
+        action:
+          type: string
+          enum: [add, remove, promote, demote]
+        participants:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    RecipientFields:
+      type: object
+      description: Exactly one recipient alias is required.
+      properties:
+        number:
+          type: string
+          minLength: 1
+        chat:
+          type: string
+          minLength: 1
+        recipient:
+          type: string
+          minLength: 1
+      oneOf:
+        - required: [number]
+          not:
+            anyOf:
+              - required: [chat]
+              - required: [recipient]
+        - required: [chat]
+          not:
+            anyOf:
+              - required: [number]
+              - required: [recipient]
+        - required: [recipient]
+          not:
+            anyOf:
+              - required: [number]
+              - required: [chat]
+    MessageOptions:
+      type: object
+      properties:
+        delay:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 120000
+          nullable: true
+        presence:
+          type: string
+          nullable: true
+          enum:
+            - composing
+            - recording
+            - paused
+        quotedMessageId:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2147483647
+          nullable: true
+        quotedMessage:
+          type: object
+          nullable: true
+          additionalProperties: true
+        externalAttributes:
+          type: object
+          nullable: true
+          additionalProperties: true
+        mentionAll:
+          type: boolean
+          nullable: true
+          default: false
+          description: Mentions all current group participants when the message type supports ContextInfo.MentionedJID.
+    AudioMessageOptions:
+      type: object
+      properties:
+        delay:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 300000
+          nullable: true
+        presence:
+          type: string
+          nullable: true
+          enum: [recording, paused]
+        quotedMessageId:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2147483647
+          nullable: true
+        quotedMessage:
+          type: object
+          nullable: true
+          additionalProperties: true
+        externalAttributes:
+          type: object
+          nullable: true
+          additionalProperties: true
+        mentionAll:
+          type: boolean
+          nullable: true
+          default: false
+    SendTextRequest:
+      allOf:
+        - $ref: '#/components/schemas/RecipientFields'
+        - type: object
+          required:
+            - textMessage
+          properties:
+            options:
+              $ref: '#/components/schemas/MessageOptions'
+            textMessage:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 65536
+    SendLinkRequest:
+      allOf:
+        - $ref: '#/components/schemas/RecipientFields'
+        - type: object
+          required:
+            - linkMessage
+          properties:
+            options:
+              $ref: '#/components/schemas/MessageOptions'
+            linkMessage:
+              type: object
+              required:
+                - link
+              properties:
+                link:
+                  type: string
+                  format: uri
+                  pattern: '^https?://'
+                thumbnailUrl:
+                  type: string
+                  format: uri
+                  pattern: '^https?://'
+                  nullable: true
+                title:
+                  type: string
+                  nullable: true
+                description:
+                  type: string
+                  nullable: true
+    SendMediaRequest:
+      allOf:
+        - $ref: '#/components/schemas/RecipientFields'
+        - type: object
+          required:
+            - mediaMessage
+          properties:
+            options:
+              $ref: '#/components/schemas/MessageOptions'
+            mediaMessage:
+              $ref: '#/components/schemas/MediaMessage'
+    MediaMessage:
+      type: object
+      required:
+        - mediatype
+        - media
+      properties:
+        mediatype:
+          type: string
+          enum:
+            - image
+            - document
+            - video
+            - audio
+            - ptv
+        fileName:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+        media:
+          type: string
+          format: uri
+          pattern: '^https?://'
+    SendMediaFileRequest:
+      type: object
+      required:
+        - number
+        - mediaType
+        - attachment
+      properties:
+        number:
+          type: string
+          minLength: 1
+        mediaType:
+          type: string
+          enum:
+            - image
+            - document
+            - video
+            - audio
+            - ptv
+        caption:
+          type: string
+          nullable: true
+        delay:
+          type: integer
+          format: int64
+        presence:
+          type: string
+        quotedMessageId:
+          type: integer
+          format: int64
+        quotedMessage:
+          type: string
+        mentionAll:
+          type: boolean
+        attachment:
+          type: string
+          format: binary
+    SendWhatsAppAudioRequest:
+      type: object
+      required:
+        - number
+        - audioMessage
+      properties:
+        number:
+          type: string
+          minLength: 1
+        options:
+          $ref: '#/components/schemas/AudioMessageOptions'
+        audioMessage:
+          type: object
+          required:
+            - audio
+          properties:
+            audio:
+              type: string
+              format: uri
+              pattern: '^https?://'
+    SendWhatsAppAudioFileRequest:
+      type: object
+      required:
+        - number
+        - attachment
+      properties:
+        number:
+          type: string
+          minLength: 1
+        delay:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 300000
+        presence:
+          type: string
+          enum: [recording, paused]
+        quotedMessageId:
+          type: integer
+          format: int64
+        quotedMessage:
+          type: string
+        mentionAll:
+          type: boolean
+        attachment:
+          type: string
+          format: binary
+    SendContactRequest:
+      allOf:
+        - $ref: '#/components/schemas/RecipientFields'
+        - type: object
+          required:
+            - contactMessage
+          properties:
+            options:
+              $ref: '#/components/schemas/MessageOptions'
+            contactMessage:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/ContactMessage'
+    ContactMessage:
+      type: object
+      required:
+        - fullName
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+        wuid:
+          type: string
+          minLength: 1
+        phoneNumber:
+          type: string
+          minLength: 1
+        organization:
+          type: string
+          nullable: true
+        vcard:
+          type: string
+          minLength: 1
+      anyOf:
+        - required: [vcard]
+        - required: [wuid]
+        - required: [phoneNumber]
+    SendLocationRequest:
+      allOf:
+        - $ref: '#/components/schemas/RecipientFields'
+        - type: object
+          required:
+            - locationMessage
+          properties:
+            options:
+              $ref: '#/components/schemas/MessageOptions'
+            locationMessage:
+              $ref: '#/components/schemas/LocationMessage'
+    LocationMessage:
+      type: object
+      required:
+        - latitude
+        - longitude
+      properties:
+        name:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+    SendReactionRequest:
+      type: object
+      required:
+        - reactionMessage
+      properties:
+        options:
+          $ref: '#/components/schemas/MessageOptions'
+        reactionMessage:
+          type: object
+          required:
+            - key
+            - reaction
+          properties:
+            key:
+              type: object
+              required:
+                - remoteJid
+                - id
+              properties:
+                remoteJid:
+                  type: string
+                  minLength: 1
+                fromMe:
+                  type: boolean
+                  nullable: true
+                id:
+                  type: string
+                  minLength: 1
+                participant:
+                  type: string
+                  nullable: true
+            reaction:
+              type: string
+    InstanceDeletedEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [instanceName, deleted, forced, message]
+          properties:
+            instanceName: {type: string}
+            deleted: {type: boolean}
+            forced: {type: boolean}
+            message: {type: string}
+    QRCodeConnectionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [count, code, base64, instanceName, connectionStatus, alreadyConnected, alreadyConnecting, ownerJid]
+          properties:
+            count: {type: integer}
+            code: {type: string}
+            base64: {type: string}
+            instanceName: {type: string}
+            connectionStatus: {type: string}
+            alreadyConnected: {type: boolean}
+            alreadyConnecting: {type: boolean}
+            ownerJid: {type: string, nullable: true}
+    PhonePairingEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [code]
+          properties:
+            code: {type: string}
+    PasskeyChallengeEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [requestId, state, expiresAt, publicKey]
+          properties:
+            requestId: {type: string, format: uuid}
+            state: {$ref: '#/components/schemas/PasskeyState'}
+            expiresAt: {type: string, format: date-time}
+            publicKey:
+              $ref: '#/components/schemas/WebAuthnPublicKey'
+    PasskeyAssertionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [state, message]
+          properties:
+            state: {$ref: '#/components/schemas/PasskeyState'}
+            message: {type: string}
+    PasskeyState:
+      type: string
+      enum: [IDLE, FETCHING_CHALLENGE, AWAITING_ASSERTION, SUBMITTING_ASSERTION, AWAITING_CONFIRMATION, CONFIRMATION_SENT, COMPLETED, FAILED]
+    WebAuthnPublicKey:
+      type: object
+      required: [challenge, timeout, rpId, allowCredentials, userVerification, extensions]
+      properties:
+        challenge: {type: string}
+        timeout: {type: integer}
+        rpId: {type: string}
+        allowCredentials:
+          type: array
+          nullable: true
+          items:
+            type: object
+            required: [id, type, transports]
+            properties:
+              id: {type: string}
+              type: {type: string}
+              transports:
+                type: array
+                items: {type: string}
+        userVerification: {type: string}
+        extensions:
+          type: object
+          nullable: true
+          additionalProperties: true
+    ConnectionStateEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [state, statusReason, instanceName, connectionStatus, connected, loggedIn, ownerJid]
+          properties:
+            state: {type: string}
+            statusReason: {type: integer, enum: [200, 503]}
+            instanceName: {type: string}
+            connectionStatus: {type: string, enum: [offline, connecting, qr_code, pairing_code, pairing, online, reconnecting, disconnected, connection_timeout, logged_out, session_missing, stream_replaced, keepalive_timeout, client_outdated, temporary_ban, connection_error]}
+            connected: {type: boolean}
+            loggedIn: {type: boolean}
+            ownerJid: {type: string, nullable: true}
+    LogoutEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [instanceName, state, connectionStatus, message]
+          properties:
+            instanceName: {type: string}
+            state: {type: string}
+            connectionStatus: {type: string, enum: [LOGGED_OUT]}
+            message: {type: string}
+    WebhookEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Webhook'}
+    Webhook:
+      type: object
+      required: [id, url, enabled, events, createdAt, updatedAt, instanceId]
+      properties:
+        id: {type: integer, format: int64}
+        url: {type: string, format: uri}
+        enabled: {type: boolean}
+        events: {$ref: '#/components/schemas/WebhookEvents'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        instanceId: {type: integer, format: int64}
+    MessageEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Message'}
+    Message:
+      type: object
+      required: [id, keyId, keyRemoteJid, keyLid, keyFromMe, keyParticipant, keyParticipantLid, pushName, messageType, content, messageTimestamp, device, isGroup, instanceId]
+      properties:
+        id: {type: integer, format: int64}
+        keyId: {type: string}
+        keyRemoteJid: {type: string, nullable: true}
+        keyLid: {type: string, nullable: true}
+        keyFromMe: {type: boolean}
+        keyParticipant: {type: string, nullable: true}
+        keyParticipantLid: {type: string, nullable: true}
+        pushName: {type: string, nullable: true}
+        messageType: {type: string}
+        content:
+          type: object
+          additionalProperties: true
+        messageTimestamp: {type: integer, format: int32}
+        device:
+          type: string
+          enum: [ios, android, web, unknown, desktop]
+        isGroup: {type: boolean, nullable: true}
+        instanceId: {type: integer, format: int64}
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+        externalAttributes:
+          type: object
+          additionalProperties: true
+    MessageWithUpdates:
+      allOf:
+        - $ref: '#/components/schemas/Message'
+        - type: object
+          required: [MessageUpdate]
+          properties:
+            MessageUpdate:
+              type: array
+              items:
+                type: object
+                required: [status, dateTime]
+                properties:
+                  status: {type: string}
+                  dateTime: {type: string, format: date-time}
+    MessageListEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [messages]
+          properties:
+            messages:
+              type: object
+              required: [total, pages, currentPage, records]
+              properties:
+                total: {type: integer, format: int64}
+                pages: {type: integer, format: int64}
+                currentPage: {type: integer, format: int64}
+                records:
+                  type: array
+                  items: {$ref: '#/components/schemas/MessageWithUpdates'}
+    MessagesReadEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [message, read]
+          properties:
+            message: {type: string, enum: ['Read messages']}
+            read: {type: string, enum: [success]}
+    ContactsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/WhatsAppNumber'}
+    WhatsAppNumber:
+      type: object
+      required: [jid, lid, exists]
+      properties:
+        jid: {type: string}
+        lid: {type: string, nullable: true}
+        exists: {type: boolean}
+    ProfilePictureEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [profilePictureUrl]
+          properties:
+            profilePictureUrl: {type: string, format: uri, nullable: true}
+    GroupInfoEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/GroupInfo'}
+    GroupInfo:
+      type: object
+      required: [id, subject, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, memberAddMode, participants]
+      properties:
+        id: {type: string}
+        subject: {type: string}
+        subjectOwner: {type: string}
+        subjectTime: {type: integer, format: int64}
+        size: {type: integer}
+        creation: {type: integer, format: int64}
+        owner: {type: string}
+        desc: {type: string}
+        descId: {type: string}
+        restrict: {type: boolean}
+        announce: {type: boolean}
+        isCommunity: {type: boolean}
+        isCommunityAnnounce: {type: boolean}
+        joinApprovalMode: {type: boolean}
+        memberAddMode: {type: boolean}
+        participants:
+          type: array
+          items: {$ref: '#/components/schemas/GroupParticipant'}
+    GroupParticipant:
+      type: object
+      required: [id, isAdmin, isSuperAdmin]
+      properties:
+        id: {type: string}
+        phoneNumber: {type: string}
+        lid: {type: string}
+        isAdmin: {type: boolean}
+        isSuperAdmin: {type: boolean}
+        displayName: {type: string}
+        error: {type: integer}
+    GroupInviteEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [invitation]
+          properties:
+            invitation: {type: string}
+    ProcessingAcceptedEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ProcessingAcceptedResponse'}
+    ProcessingAcceptedResponse:
+      type: object
+      required:
+        - statusCode
+        - status
+        - message
+        - processId
+        - instanceName
+      properties:
+        statusCode:
+          type: integer
+          example: 202
+        status:
+          type: string
+          example: processing
+        message:
+          type: string
+        processId:
+          type: string
+        instanceName:
+          type: string
+    ErrorResponse:
+      type: object
+      required:
+        - statusCode
+        - error
+        - messages
+      properties:
+        statusCode:
+          type: integer
+        error:
+          type: string
+        code:
+          type: string
+        messages:
+          type: array
+          items:
+            type: string
+    MentionAllSendMessageWebhookData:
+      type: object
+      description: Data object used inside the standard send.message webhook envelope.
+      properties:
+        processId:
+          type: string
+        status:
+          type: string
+          enum:
+            - sent
+            - failed
+        mentionAll:
+          type: boolean
+        data:
+          type: object
+          properties:
+            messageId:
+              type: string
+            remoteJid:
+              type: string
+            participantCount:
+              type: integer
+            timestamp:
+              type: string
+              format: date-time
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - INSTANCE_NOT_CONNECTED
+                - GROUP_INFO_FETCH_FAILED
+                - GROUP_HAS_NO_PARTICIPANTS
+                - MESSAGE_SEND_FAILED
+                - GROUP_MENTION_PROCESSING_FAILED
+            message:
+              type: string
+        externalAttributes:
+          type: object
+          additionalProperties: true

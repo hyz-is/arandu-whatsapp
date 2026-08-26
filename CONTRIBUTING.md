@@ -8,6 +8,7 @@ Run the four gates. They are what CI runs, and a pull request that fails one of
 them fails for everybody who pulls after it.
 
 ```bash
+export GOWORK=off
 gofmt -l $(find . -name '*.go' -not -path '*/testdata/*' -not -name '*.kyse.go')
 go build ./...
 go vet ./...
@@ -57,4 +58,4 @@ Do not open an issue. See [SECURITY.md](SECURITY.md).
 ## Licence
 
 By contributing you agree that your contribution is licensed under the MIT
-licence, the same as the rest of :module_path.
+licence, the same as the rest of github.com/hyz-is/arandu-whatsapp.

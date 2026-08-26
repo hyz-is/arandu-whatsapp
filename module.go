@@ -1,250 +1,326 @@
-// Package skeleton is an Arandu module: one entity, one policy that decides
-// about it, one repository that is the only door to its table, and the routes
-// that reach them.
-//
-// The files are laid out by role rather than by layer, so the whole package
-// reads top to bottom:
-//
-//	module.go      -> registration, routes, handlers and migrations
-//	config.go      -> what the application passes in
-//	model.go       -> the entity, and what it may answer with
-//	policy.go      -> who may do what
-//	repository.go  -> data access, which requires a Grant
-//	service.go     -> the rules, and the only path a handler may take
-//
-// An application registers it explicitly. There is no service provider, no
-// container and no discovery: the wiring is three lines somebody wrote, and
-// reading them is how they learn what the application is made of.
-package skeleton
+// Package whatsapp provides a tenant-scoped WhatsApp API module for Arandu.
+package whatsapp
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	stdhttp "net/http"
+	"sync"
 
 	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/foundation"
 	fhttp "github.com/arandu-io/framework/http"
 	"github.com/arandu-io/framework/security"
-	"github.com/arandu-io/framework/validation"
-	"github.com/arandu-io/hesape/database/migrations"
+	"github.com/arandu-io/hesape/queue"
+
+	"github.com/hyz-is/arandu-whatsapp/internal/chat"
+	internalrepo "github.com/hyz-is/arandu-whatsapp/internal/database/repository"
+	"github.com/hyz-is/arandu-whatsapp/internal/group"
+	"github.com/hyz-is/arandu-whatsapp/internal/message"
+	webhooksvc "github.com/hyz-is/arandu-whatsapp/internal/webhook"
+	internalwhatsapp "github.com/hyz-is/arandu-whatsapp/internal/whatsapp"
+	"github.com/hyz-is/arandu-whatsapp/internal/whatsapp/address"
 )
 
-// Module is what the application registers.
-//
-// It implements foundation.Module, which is Name and Routes and nothing else --
-// that pair is the whole public contract between a package and the framework.
-//
-// It also implements foundation.Migratable, because it owns a table. The other
-// optional interfaces are declared beside Module in the framework and are opted
-// into the same way, by implementing them: Bootable to prepare state at boot,
-// Background to run a loop of its own, Schedulable to declare work for the
-// scheduler, Health to report on the storage it depends on, Closable to give
-// resources back at shutdown.
+// Module wires the WhatsApp domain into the Arandu lifecycle. The database and
+// session store are borrowed from the host application and are never closed by
+// this module.
 type Module struct {
 	cfg      Config
-	svc      *SkeletonService
+	db       *data.DB
 	sessions *security.SessionStore
+	logger   *slog.Logger
+
+	service           *Service
+	webhookManager    *webhooksvc.Manager
+	messageProcessor  *message.MessageProcessingManager
+	connections       *internalwhatsapp.Service
+	whatsMeowUpgrader whatsMeowSchemaUpgrader
+
+	mu          sync.RWMutex
+	lifecycle   context.Context
+	cancel      context.CancelFunc
+	restoreDone chan struct{}
+	restoreErr  error
+	started     bool
+	closed      bool
 }
 
-// Compile-time proof that the module honors the contracts it claims.
 var (
 	_ foundation.Module     = (*Module)(nil)
+	_ foundation.Bootable   = (*Module)(nil)
+	_ foundation.Background = (*Module)(nil)
+	_ foundation.Health     = (*Module)(nil)
+	_ foundation.Closable   = (*Module)(nil)
 	_ foundation.Migratable = (*Module)(nil)
 )
 
-// New returns the module, or the reason it cannot be built.
-//
-// The collaborators are parameters and not fields somebody fills in afterwards:
-// a module that could be registered half-wired is a module whose first request
-// is the thing that reports the missing half.
-//
-// It returns an error rather than panicking or carrying on, because everything
-// it refuses is a wiring mistake, and a wiring mistake found at boot costs one
-// restart. The same mistake found later is a request that reached a nil handle.
+// New validates configuration and assembles all collaborators without doing
+// database I/O, starting goroutines, connecting to WhatsApp or running schema
+// changes. That keeps commands such as `aru migrate` and `aru route:list`
+// side-effect free.
 func New(cfg Config, db *data.DB, sessions *security.SessionStore) (*Module, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if db == nil {
-		return nil, errors.New("skeleton: New needs a database handle: this package owns a table, and there is no in-memory mode that would let it start without one")
+		return nil, errors.New("whatsapp: New needs a database handle")
 	}
 	if sessions == nil {
-		return nil, errors.New("skeleton: New needs a session store: it is where the subject comes from, and a request with no subject cannot be authorized")
+		return nil, errors.New("whatsapp: New needs a session store")
 	}
+	if db.Dialect() != data.DialectPostgres && db.Dialect() != data.DialectSQLite {
+		return nil, fmt.Errorf("whatsapp: database dialect %q is unsupported; use PostgreSQL or SQLite", db.Dialect())
+	}
+
 	cfg = cfg.withDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	logger := slog.Default()
+	base := internalrepo.NewBase(db)
+	instances := internalrepo.NewInstanceRepository(base)
+	messages := internalrepo.NewMessageRepository(base)
+	messageUpdates := internalrepo.NewMessageUpdateRepository(base)
+	contacts := internalrepo.NewContactRepository(base)
+	webhookRepository := internalrepo.NewWebhookRepository(base)
+	addressRepository := internalrepo.NewAddressMappingRepository(base)
+
+	webhookManager, err := webhooksvc.NewManager(db, webhooksvc.ManagerConfig{
+		GlobalURL: cfg.Webhooks.GlobalURL, GlobalEnabled: cfg.Webhooks.GlobalEnabled,
+		SigningSecret: cfg.Webhooks.SigningSecret, Retention: cfg.Webhooks.Retention,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("whatsapp: build webhook manager: %w", err)
+	}
+
+	waLogger := internalwhatsapp.NewWhatsmeowLogger(logger)
+	clientFactory, err := internalwhatsapp.NewSQLStoreClientFactory(db, waLogger)
+	if err != nil {
+		return nil, fmt.Errorf("whatsapp: build WhatsMeow store: %w", err)
+	}
+	hub := internalwhatsapp.NewClientHub()
+	lock := internalwhatsapp.NewPostgresInstanceConnectionLock(instances)
+	events := internalwhatsapp.NewEventPersistenceService(internalwhatsapp.EventPersistenceConfig{
+		SaveDataNewMessage:    cfg.Persistence.Messages,
+		SaveMessageUpdate:     cfg.Persistence.MessageUpdates,
+		SaveDataContacts:      cfg.Persistence.Contacts,
+		ProfilePictureTimeout: cfg.WhatsApp.ProfilePictureTimeout,
+	}, messages, messageUpdates, contacts)
+	events.SetWebhookDispatcher(instances, webhookManager)
+	connections, err := internalwhatsapp.NewService(
+		cfg.internalWhatsApp(), instances, clientFactory, hub, lock, events, webhookManager, logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("whatsapp: build connection service: %w", err)
+	}
+
+	resolver := address.NewResolver(addressRepository, cfg.WhatsApp.AddressCacheTTL)
+	messageService := message.NewService(instances, messages, connections, resolver, webhookManager)
+	messageService.ConfigureMedia(message.AudioConfig{
+		MaxInputBytes: cfg.Media.MaxInputBytes, MaxDurationSeconds: cfg.Media.MaxDurationSeconds,
+		ProcessingTimeout: cfg.Media.ProcessingTimeout, FFmpegPath: cfg.Media.FFmpegPath,
+		FFprobePath: cfg.Media.FFprobePath, TempDir: cfg.Media.TempDir,
+	}, message.ThumbnailConfig{
+		MaxInputBytes: cfg.Media.MaxInputBytes, Timeout: cfg.Media.ProcessingTimeout,
+		FFmpegPath: cfg.Media.FFmpegPath, TempDir: cfg.Media.TempDir,
+	})
+	processor, err := message.NewMessageProcessingManager(db, messageService, message.ProcessingConfig{
+		ProcessingTimeout: cfg.Processing.ProcessingTimeout,
+		GroupInfoTimeout:  cfg.Processing.GroupInfoTimeout, SendTimeout: cfg.Processing.SendTimeout,
+		Retention: cfg.Processing.Retention,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("whatsapp: build message processor: %w", err)
+	}
+	messageService.SetProcessor(processor)
+	chatService := chat.NewService(instances, messages, connections, resolver)
+	groupService := group.NewService(instances, connections)
+	webhookService := webhooksvc.NewService(instances, webhookRepository, cfg.Webhooks.SigningSecret != "")
+	publicRepository := newInstanceRepository(instances)
+	policy := NewInstancePolicy(cfg.Policy)
+
 	return &Module{
-		cfg:      cfg,
-		svc:      NewSkeletonService(NewSkeletonRepository(db)),
-		sessions: sessions,
+		cfg: cfg, db: db, sessions: sessions, logger: logger,
+		service: newService(cfg.Tenant, publicRepository, instances, policy, connections,
+			messageService, chatService, groupService, webhookService),
+		webhookManager:   webhookManager,
+		messageProcessor: processor, connections: connections,
+		whatsMeowUpgrader: clientFactory.Store(),
 	}, nil
 }
 
-// Name is the module identifier: a lowercase slug, stable, no spaces.
-//
-// It is what `aru route:list` groups by and what the route names are prefixed with,
-// so changing it changes addresses that other code has already written down.
-func (m *Module) Name() string { return "skeleton" }
+// Name is the stable module identifier used by Arandu route tooling.
+func (*Module) Name() string { return "whatsapp" }
 
-// Routes registers the module's routes under the configured prefix.
-//
-// They are named, so a URL is built from a name rather than written out a
-// second time somewhere else -- two spellings of one address disagree, and the
-// failure when they do is a link to a 404.
-func (m *Module) Routes(r *fhttp.Router) {
-	r.Action(stdhttp.MethodGet, m.cfg.Prefix, m.index).Name("skeleton.index")
-	r.Action(stdhttp.MethodGet, m.cfg.Prefix+"/{id}", m.show).Name("skeleton.show")
-	r.Action(stdhttp.MethodPost, m.cfg.Prefix, m.store).Name("skeleton.store")
+// Service exposes the authorized domain API for explicit composition by the
+// host application.
+func (m *Module) Service() *Service { return m.service }
+
+// RegisterJobHandlers registers every durable module job with the host
+// application's native queue worker.
+func (m *Module) RegisterJobHandlers(worker *queue.Worker) error {
+	if worker == nil {
+		return errors.New("whatsapp: RegisterJobHandlers needs a worker")
+	}
+	for _, name := range []string{
+		webhooksvc.WebhookDeliveryJobName,
+		message.MessageProcessingJobName,
+		message.MessageProcessingCleanupJobName,
+	} {
+		if _, exists := worker.Handler(name); exists {
+			return fmt.Errorf("whatsapp: job handler %q is already registered", name)
+		}
+	}
+	if err := m.webhookManager.RegisterJobHandlers(worker); err != nil {
+		return err
+	}
+	return m.messageProcessor.RegisterJobHandlers(worker)
 }
 
-// Handlers are thin on purpose: read the input, ask the service, answer. No
-// rule and no statement lives here. A handler that reached the repository would
-// be a handler that skipped the policy, and the layout is what makes that
-// visible rather than the type system.
-
-// index answers a page of records.
-func (m *Module) index(ctx *fhttp.Context) error {
-	query := data.Query{
-		Sort:   ctx.Query("sort"),
-		Cursor: ctx.Query("cursor"),
-		Limit:  m.cfg.PageSize,
-	}
-
-	records, err := m.svc.List(ctx.Ctx(), m.subject(ctx.Request), query)
-	if err != nil {
-		return m.answer(ctx, err)
-	}
-
-	// A full page is the only one that can have a successor. A short page is
-	// the last one, and offering a cursor for it would be offering a next page
-	// that comes back empty.
-	cursor := ""
-	if len(records) == m.cfg.PageSize {
-		cursor = records[len(records)-1].ID
-	}
-	return ctx.JSON(stdhttp.StatusOK, NewCollection(records, cursor))
+// Boot prepares the process-global WhatsMeow device descriptor. It performs no
+// database or network work.
+func (m *Module) Boot(context.Context) error {
+	return internalwhatsapp.ConfigureSessionDevice(internalwhatsapp.SessionDeviceConfig{
+		Client: m.cfg.WhatsApp.SessionPhoneClient,
+		Name:   m.cfg.WhatsApp.SessionPhoneName,
+	}, m.logger)
 }
 
-// show answers one record.
-func (m *Module) show(ctx *fhttp.Context) error {
-	record, err := m.svc.Find(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("id"))
-	if err != nil {
-		return m.answer(ctx, err)
+// Start verifies that migrations were applied. Connection restoration runs
+// asynchronously and its terminal error is reported by Health. Durable jobs
+// are owned by the host queue worker.
+func (m *Module) Start(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return errors.New("whatsapp: module is closed")
 	}
-	return ctx.JSON(stdhttp.StatusOK, NewResource(record))
-}
-
-// store creates one record.
-func (m *Module) store(ctx *fhttp.Context) error {
-	in := CreateRequest{Name: ctx.Input("name")}
-
-	record, err := m.svc.Create(ctx.Ctx(), m.subject(ctx.Request), in)
-	if err != nil {
-		return m.answer(ctx, err)
-	}
-	return ctx.JSON(stdhttp.StatusCreated, NewResource(record))
-}
-
-// subject reads who is acting from the session, and from nowhere else.
-//
-// A request with no readable session is a declared guest and not an empty
-// subject. The difference matters: an empty subject is refused before the
-// policy is consulted, because it is almost always a session that failed to
-// load, and a policy asked about nobody answers about nobody. A guest reaches
-// the policy and is refused there, by a rule somebody wrote -- or allowed,
-// where the package means to serve a reader who never signed in.
-//
-// The tenant of that guest is the application's, from configuration. It is the
-// one place a tenant does not come from a Grant, and it is because there is no
-// Grant yet: everywhere downstream, data.Tenant is what the statements take.
-func (m *Module) subject(r *stdhttp.Request) security.Subject {
-	sub, err := m.sessions.Load(r.Context(), r)
-	if err != nil || sub.ID == "" {
-		return security.Guest(m.cfg.Tenant)
-	}
-	return sub
-}
-
-// answer turns what the service refused into something the client can act on.
-//
-// Three refusals have an answer, and everything else does not. An error this
-// package did not expect is returned rather than swallowed: the framework turns
-// it into the error page in development and a 500 in production, which is the
-// honest outcome. Answering 200 with an empty body is the failure nobody
-// debugs.
-//
-// A refusal is answered with a status and no detail. Telling the client why a
-// policy said no is telling them what exists and what does not, one request at
-// a time; the reason is in the log, where the person operating the system reads
-// it and the person probing it does not.
-func (m *Module) answer(ctx *fhttp.Context, err error) error {
-	switch {
-	case errors.Is(err, security.ErrForbidden):
-		fhttp.Refuse(ctx.Response, ctx.Request, stdhttp.StatusForbidden, "forbidden")
-		return nil
-	case errors.Is(err, ErrNotFound):
-		fhttp.Refuse(ctx.Response, ctx.Request, stdhttp.StatusNotFound, "not found")
+	if m.started {
 		return nil
 	}
-
-	// A rejected input is the answer rather than a failure, and the fields that
-	// were rejected are the client's own, so naming them gives nothing away.
-	var rejected validation.Errors
-	if errors.As(err, &rejected) {
-		fhttp.Refuse(ctx.Response, ctx.Request, stdhttp.StatusUnprocessableEntity, rejected.Error())
-		return nil
+	if m.db.Unwrap() == nil {
+		return errors.New("whatsapp: Start needs an initialized database handle")
 	}
-	return err
-}
-
-// Migrations declares the schema this module owns.
-//
-// They are returned in the order their names sort in, which is the order they
-// apply in: the name carries the order, and nothing else decides it.
-func (m *Module) Migrations() []foundation.Migration {
-	return []foundation.Migration{createSkeletons{}}
-}
-
-// The migration is reversible, and the assertion is here rather than discovered
-// at rollback: the migrator tests for Down with a type assertion, so a Down
-// with the wrong signature would leave a rollback that silently does nothing.
-var _ migrations.ReversibleMigration = createSkeletons{}
-
-// createSkeletons is the table this module owns, and the index its listing
-// reads by.
-type createSkeletons struct{ migrations.BaseMigration }
-
-// GetName is the migration's identity, and it carries the order. It is fixed
-// once the package is published: changing what an applied name means leaves the
-// change missing everywhere it already ran, and nothing says so.
-func (createSkeletons) GetName() string { return "20260823_0001_create_skeletons" }
-
-// Up creates the table and the index the keyset pagination scans.
-//
-// Every type here spells the same in SQLite, PostgreSQL and MySQL, which is
-// what lets one application develop on a file and deploy on Postgres without a
-// second schema. The identifier columns are VARCHAR rather than TEXT because
-// they take part in a key, and MySQL refuses TEXT in one without a prefix
-// length. The timestamp has no database default: the value comes from Go.
-func (createSkeletons) Up(ctx context.Context, conn migrations.Connection) error {
-	if _, err := conn.Statement(ctx, `CREATE TABLE skeletons (
-    id          VARCHAR(255) PRIMARY KEY,
-    tenant_id   VARCHAR(255) NOT NULL,
-    name        VARCHAR(255) NOT NULL,
-    created_at  TIMESTAMP NOT NULL
-)`, nil); err != nil {
+	if err := m.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("whatsapp: database health check: %w", err)
+	}
+	if err := m.verifyWhatsMeowSchema(ctx); err != nil {
 		return err
 	}
 
-	// The index matches the ORDER BY of the listing, tenant first. Without it
-	// every page is a scan of every customer's rows.
-	_, err := conn.Statement(ctx,
-		`CREATE INDEX skeletons_tenant_created_idx ON skeletons (tenant_id, created_at, id)`, nil)
+	lifecycle, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	//arandu:system-grant module startup owns tenant-scoped runtime work
+	runtimeGrant := security.SystemGrant(ActionRuntime, m.cfg.Tenant)
+
+	m.lifecycle = lifecycle
+	m.cancel = cancel
+	m.restoreDone = make(chan struct{})
+	m.started = true
+	go m.restore(lifecycle, runtimeGrant, m.restoreDone)
+	return nil
+}
+
+func (m *Module) verifyWhatsMeowSchema(ctx context.Context) error {
+	if m.db.Dialect() == data.DialectSQLite {
+		var enabled int
+		if err := m.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&enabled); err != nil {
+			return fmt.Errorf("whatsapp: verify SQLite foreign keys: %w", err)
+		}
+		if enabled != 1 {
+			return errors.New("whatsapp: SQLite foreign keys are disabled; enable them before starting the module")
+		}
+	}
+	var version int
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT version FROM whatsmeow_version LIMIT 1`).Scan(&version); err != nil {
+		return fmt.Errorf("whatsapp: WhatsMeow schema is unavailable; run `aru migrate`: %w", err)
+	}
+	if version < 1 {
+		return errors.New("whatsapp: WhatsMeow schema has no applied version; run `aru migrate`")
+	}
+	return nil
+}
+
+func (m *Module) restore(ctx context.Context, grant security.Grant, done chan struct{}) {
+	defer close(done)
+	err := m.connections.Restore(ctx, grant)
+	if err == nil || errors.Is(err, context.Canceled) {
+		return
+	}
+	m.mu.Lock()
+	m.restoreErr = fmt.Errorf("restore WhatsApp connections: %w", err)
+	m.mu.Unlock()
+}
+
+// Health checks only module-owned runtime state and the borrowed database. It
+// does not call WhatsApp or probe every connected device.
+func (m *Module) Health(ctx context.Context) error {
+	if m.db == nil || m.db.Unwrap() == nil {
+		return errors.New("whatsapp: database handle is unavailable")
+	}
+	if err := m.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("whatsapp: database health check: %w", err)
+	}
+	m.mu.RLock()
+	err := m.restoreErr
+	closed := m.closed
+	m.mu.RUnlock()
+	if closed {
+		return errors.New("whatsapp: module is closed")
+	}
 	return err
 }
 
-// Down drops the table, which takes its index with it.
-func (createSkeletons) Down(ctx context.Context, conn migrations.Connection) error {
-	_, err := conn.Statement(ctx, `DROP TABLE skeletons`, nil)
-	return err
+// Close stops producers before consumers while leaving the shared database,
+// SessionStore and WhatsMeow container ownership with the host application.
+func (m *Module) Close(ctx context.Context) error {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
+	m.closed = true
+	cancel := m.cancel
+	done := m.restoreDone
+	m.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	var errs []error
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			errs = append(errs, ctx.Err())
+		}
+	}
+	if err := m.connections.Shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("stop WhatsApp connections: %w", err))
+	}
+	return errors.Join(errs...)
 }
+
+// Migrations declares the module-owned domain schema and delegates the
+// WhatsMeow store schema to its upstream container. They are never applied by
+// New, Boot or Start.
+func (m *Module) Migrations() []foundation.Migration {
+	return whatsappMigrations(m.whatsMeowUpgrader)
+}
+
+// subject obtains identity exclusively from the Arandu SessionStore. A failed
+// lookup becomes a guest in the module's configured tenant.
+func (m *Module) subject(r *stdhttp.Request) security.Subject {
+	subject, err := m.sessions.Load(r.Context(), r)
+	if err != nil || subject.ID == "" {
+		return security.Guest(m.cfg.Tenant)
+	}
+	return subject
+}
+
+// Routes and the HTTP handlers are kept in routes.go and handlers_*.go so the
+// lifecycle remains auditable in one place.
+func (m *Module) Routes(r *fhttp.Router) { m.registerRoutes(r) }

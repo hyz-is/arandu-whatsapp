@@ -1,234 +1,174 @@
-package skeleton
+package whatsapp
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"time"
+	"encoding/json"
+	"strings"
 
 	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/security"
+
+	internalrepo "github.com/hyz-is/arandu-whatsapp/internal/database/repository"
+	dbtypes "github.com/hyz-is/arandu-whatsapp/internal/database/types"
 )
 
-// ErrNotFound is returned when no row matches, so callers do not have to import
-// database/sql to compare against sql.ErrNoRows.
-var ErrNotFound = errors.New("skeleton: record not found")
+// InstanceRepository is the public, Grant-first door to instance persistence.
+// Internal SQL adapters receive the same explicit Grant and repeat the action
+// check before deriving the tenant or reaching the database.
+type InstanceRepository struct {
+	inner internalrepo.InstanceRepository
+}
 
-// Pagination bounds for List. A request that asks for everything gets the
-// maximum, never everything: an unbounded query is how one page load takes a
-// production database down.
+// NewInstanceRepository returns an instance repository over the application database.
+func NewInstanceRepository(db *data.DB) *InstanceRepository {
+	base := internalrepo.NewBase(db)
+	return newInstanceRepository(internalrepo.NewInstanceRepository(base))
+}
+
+func newInstanceRepository(inner internalrepo.InstanceRepository) *InstanceRepository {
+	return &InstanceRepository{inner: inner}
+}
+
+var _ data.Repository[Instance, int64] = (*InstanceRepository)(nil)
+
 const (
-	defaultLimit = 50
-	maxLimit     = 200
+	// DefaultInstancePageLimit is used when an instance query omits its limit.
+	DefaultInstancePageLimit = internalrepo.DefaultInstancePageLimit
+	// MaxInstancePageLimit is the largest accepted instance page.
+	MaxInstancePageLimit = internalrepo.MaxInstancePageLimit
 )
 
-// SkeletonRepository is the only door to the skeletons table.
-//
-// Every method takes the Grant before the id, and the order is the mechanism
-// rather than a convention. A caller cannot name a record without first holding
-// a decision that was already made about it, and cannot leave the decision out,
-// because the call does not compile without it.
-//
-// Every method opens with g.Check, which proves the Grant was issued for this
-// exact action. That is the second half: a Grant obtained for one action and
-// spent on another is the copy-paste between two repository methods, and it
-// fails here rather than reaching a row.
-//
-// The tenant is read from the Grant with data.Tenant and from nowhere else --
-// never from the path, the body, the query string or a header. The value on the
-// Grant came from the session; a value that came in with the request is a value
-// the caller chose.
-//
-// The SQL is written with "?" placeholders and with types every supported
-// engine shares, so the same statements run on SQLite and on PostgreSQL. The
-// dialect rebinds the placeholders; nothing else needs translating.
-type SkeletonRepository struct {
-	db *data.DB
+// InstanceListQuery selects one forward-only page of tenant instances.
+type InstanceListQuery struct {
+	// Name limits results to instance names containing this value.
+	Name *string
+	// Limit is the page size. Zero uses DefaultInstancePageLimit.
+	Limit int
+	// Cursor is the opaque NextCursor returned by the preceding page.
+	Cursor string
 }
 
-// NewSkeletonRepository returns a repository over an instrumented handle.
-//
-// The handle is the framework's wrapper and not a bare *sql.DB, which is what
-// puts every statement issued here on the debug page with the file and line
-// that issued it.
-func NewSkeletonRepository(db *data.DB) *SkeletonRepository {
-	return &SkeletonRepository{db: db}
+// InstancePage contains tenant instances and the cursor for the next page.
+type InstancePage struct {
+	// Items are the instances in this page.
+	Items []Instance
+	// NextCursor is empty when this is the final page.
+	NextCursor string
+	// PerPage is the normalized page size.
+	PerPage int
 }
 
-// Repository conformance is asserted at compile time: if the contract changes,
-// this line breaks before any caller does.
-var _ data.Repository[Skeleton, string] = (*SkeletonRepository)(nil)
-
-// skeletonColumns is the column list, written once. Two spellings of it drift,
-// and the way they drift is a scan that reads the wrong column into the wrong
-// field without failing.
-const skeletonColumns = `id, tenant_id, name, created_at`
-
-// Find returns one record by id, scoped to the grant's tenant.
-func (r *SkeletonRepository) Find(ctx context.Context, g security.Grant, id string) (Skeleton, error) {
-	if err := g.Check(SkeletonView); err != nil {
-		return Skeleton{}, err
+// Find returns one instance in the Grant tenant.
+func (r *InstanceRepository) Find(ctx context.Context, grant security.Grant, id int64) (Instance, error) {
+	if err := grant.Check(ActionInstanceView); err != nil {
+		return Instance{}, err
 	}
-	row := r.db.QueryRowContext(ctx,
-		`SELECT `+skeletonColumns+` FROM skeletons WHERE id = ? AND tenant_id = ?`,
-		id, data.Tenant(g))
-	return scanSkeleton(row)
+	item, err := r.inner.FindByID(ctx, grant, id)
+	if err != nil {
+		return Instance{}, err
+	}
+	return instanceFromInternal(item.Instance), nil
 }
 
-// sortableSkeleton is the ordering allowlist.
-//
-// A sort field is a column name, and a column name interpolated from the
-// request is injection through another door -- so the only accepted values are
-// the ones listed here, and anything else is refused rather than ignored.
-var sortableSkeleton = map[string]string{
-	"":           "created_at",
-	"name":       "name",
-	"created_at": "created_at",
+// FindByName returns one instance by its stable public name.
+func (r *InstanceRepository) FindByName(ctx context.Context, grant security.Grant, name string) (Instance, error) {
+	if err := grant.Check(ActionInstanceView); err != nil {
+		return Instance{}, err
+	}
+	item, err := r.inner.FindByName(ctx, grant, name)
+	if err != nil {
+		return Instance{}, err
+	}
+	return instanceFromInternal(item.Instance), nil
 }
 
-// List returns a page of records in the grant's tenant.
-//
-// Reading is authorized like writing. There is no listing that skips the
-// policy: a read model with no check is a leak between customers with a
-// technical name.
-//
-// Pagination is keyset based on (created_at, id). OFFSET grows more expensive
-// with every page and skips rows when data changes underneath it.
-func (r *SkeletonRepository) List(ctx context.Context, g security.Grant, q data.Query) ([]Skeleton, error) {
-	if err := g.Check(SkeletonList); err != nil {
-		return nil, err
-	}
-	column, ok := sortableSkeleton[q.Sort]
-	if !ok {
-		return nil, fmt.Errorf("skeleton: sort field not allowed: %q", q.Sort)
-	}
-	limit := q.Limit
-	switch {
-	case limit <= 0:
-		limit = defaultLimit
-	case limit > maxLimit:
-		limit = maxLimit
-	}
-
-	query := `SELECT ` + skeletonColumns + ` FROM skeletons WHERE tenant_id = ?`
-	args := []any{data.Tenant(g)}
-	if q.Cursor != "" {
-		// Row values -- (a, b) > (c, d) -- are not portable, so the comparison
-		// is written out. It is the same index scan, spelled for every engine.
-		query += ` AND (created_at > (SELECT created_at FROM skeletons WHERE id = ? AND tenant_id = ?)
-		            OR (created_at = (SELECT created_at FROM skeletons WHERE id = ? AND tenant_id = ?) AND id > ?))`
-		args = append(args, q.Cursor, args[0], q.Cursor, args[0], q.Cursor)
-	}
-	query += ` ORDER BY ` + column + `, id LIMIT ?`
-	args = append(args, limit)
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
+// List returns one bounded tenant-scoped page for the legacy framework repository contract.
+func (r *InstanceRepository) List(ctx context.Context, grant security.Grant, query data.Query) ([]Instance, error) {
+	page, err := r.listPage(ctx, grant, InstanceListQuery{Limit: query.Limit, Cursor: query.Cursor}, query.Sort)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	return page.Items, nil
+}
 
-	var out []Skeleton
-	for rows.Next() {
-		record, err := scanSkeleton(rows)
-		if err != nil {
-			return nil, err
+// ListPage returns a bounded tenant-scoped page and its next cursor.
+func (r *InstanceRepository) ListPage(ctx context.Context, grant security.Grant, query InstanceListQuery) (InstancePage, error) {
+	return r.listPage(ctx, grant, query, "")
+}
+
+func (r *InstanceRepository) listPage(ctx context.Context, grant security.Grant, query InstanceListQuery, sort string) (InstancePage, error) {
+	if err := grant.Check(ActionInstanceList); err != nil {
+		return InstancePage{}, err
+	}
+	limit := query.Limit
+	if limit == 0 {
+		limit = DefaultInstancePageLimit
+	}
+	if limit < 1 || limit > MaxInstancePageLimit {
+		return InstancePage{}, ErrInvalidInput
+	}
+	var name *string
+	if query.Name != nil {
+		value := strings.TrimSpace(*query.Name)
+		if value == "" || len(value) > 255 {
+			return InstancePage{}, ErrInvalidInput
 		}
-		out = append(out, record)
+		name = &value
 	}
-	return out, rows.Err()
-}
-
-// Create inserts the record and returns it as stored.
-//
-// The tenant on the entity is overwritten with the one from the Grant rather
-// than trusted. A caller that filled the field in has filled in a guess; the
-// Grant carries the answer, and writing the guess is how a row lands in another
-// customer's data with every check having passed.
-//
-// The id and the timestamp are generated here rather than by the database, for
-// the reason the entity gives: a DEFAULT that produces a uuid is spelled
-// differently in every engine, and generating them in Go is what keeps one
-// schema working everywhere.
-func (r *SkeletonRepository) Create(ctx context.Context, g security.Grant, record Skeleton) (Skeleton, error) {
-	if err := g.Check(SkeletonCreate); err != nil {
-		return Skeleton{}, err
-	}
-	if record.ID == "" {
-		var err error
-		if record.ID, err = data.NewID(); err != nil {
-			return Skeleton{}, err
-		}
-	}
-	record.TenantID = data.Tenant(g)
-	record.CreatedAt = time.Now().UTC()
-
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO skeletons (`+skeletonColumns+`) VALUES (?, ?, ?, ?)`,
-		record.ID, record.TenantID, record.Name, record.CreatedAt)
+	page, err := r.inner.ListPage(ctx, grant, data.Query{Limit: limit, Cursor: query.Cursor, Sort: sort}, name)
 	if err != nil {
-		return Skeleton{}, err
+		return InstancePage{}, err
 	}
-	return record, nil
+	out := make([]Instance, 0, len(page.Items))
+	for _, item := range page.Items {
+		out = append(out, instanceFromInternal(item.Instance))
+	}
+	return InstancePage{Items: out, NextCursor: page.Next, PerPage: limit}, nil
 }
 
-// Update writes the mutable fields.
-//
-// The tenant is not one of them: moving a record between customers is not an
-// update, and a statement that could do it by accident is a statement that
-// eventually does.
-//
-// A statement that changed no row is ErrNotFound rather than silence. An update
-// that reported success and wrote nothing is somebody typing a change and
-// reading the old value back.
-func (r *SkeletonRepository) Update(ctx context.Context, g security.Grant, record Skeleton) (Skeleton, error) {
-	if err := g.Check(SkeletonUpdate); err != nil {
-		return Skeleton{}, err
+// Create stores a new instance in the Grant tenant.
+func (r *InstanceRepository) Create(ctx context.Context, grant security.Grant, entity Instance) (Instance, error) {
+	if err := grant.Check(ActionInstanceCreate); err != nil {
+		return Instance{}, err
 	}
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE skeletons SET name = ? WHERE id = ? AND tenant_id = ?`,
-		record.Name, record.ID, data.Tenant(g))
+	status := dbtypes.InstanceStatus(entity.Status)
+	var statusPointer *dbtypes.InstanceStatus
+	if entity.Status != "" {
+		statusPointer = &status
+	}
+	item, err := r.inner.Create(ctx, grant, dbtypes.CreateInstanceInput{
+		Name: entity.Name, Description: entity.Description, Status: statusPointer,
+		OwnerJid: entity.OwnerJID, ProfilePicUrl: entity.ProfilePictureURL,
+		ExternalAttributes: entity.ExternalAttributes,
+	})
 	if err != nil {
-		return Skeleton{}, err
+		return Instance{}, err
 	}
-	if n, err := res.RowsAffected(); err == nil && n == 0 {
-		return Skeleton{}, ErrNotFound
-	}
-	return record, nil
+	return instanceFromInternal(item.Instance), nil
 }
 
-// Delete removes one record within the grant's tenant.
-func (r *SkeletonRepository) Delete(ctx context.Context, g security.Grant, id string) error {
-	if err := g.Check(SkeletonDelete); err != nil {
+// Update changes the mutable instance metadata.
+func (r *InstanceRepository) Update(ctx context.Context, grant security.Grant, entity Instance) (Instance, error) {
+	if err := grant.Check(ActionInstanceUpdate); err != nil {
+		return Instance{}, err
+	}
+	name := entity.Name
+	description := dbtypes.OptionalField[string]{Set: true, Value: entity.Description}
+	profile := dbtypes.OptionalField[string]{Set: true, Value: entity.ProfilePictureURL}
+	attributes := dbtypes.OptionalField[json.RawMessage]{Set: true, Value: &entity.ExternalAttributes}
+	item, err := r.inner.Update(ctx, grant, entity.ID, dbtypes.UpdateInstanceInput{
+		Name: &name, Description: description, ProfilePicUrl: profile, ExternalAttributes: attributes,
+	})
+	if err != nil {
+		return Instance{}, err
+	}
+	return instanceFromInternal(item.Instance), nil
+}
+
+// Delete removes one instance and its owned rows.
+func (r *InstanceRepository) Delete(ctx context.Context, grant security.Grant, id int64) error {
+	if err := grant.Check(ActionInstanceDelete); err != nil {
 		return err
 	}
-	res, err := r.db.ExecContext(ctx,
-		`DELETE FROM skeletons WHERE id = ? AND tenant_id = ?`, id, data.Tenant(g))
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err == nil && n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// rowScanner is satisfied by both *sql.Row and *sql.Rows, so one scan function
-// serves the single-row and the multi-row query.
-type rowScanner interface{ Scan(dest ...any) error }
-
-// scanSkeleton reads one row, and translates the absence of one into an error
-// this package owns.
-func scanSkeleton(row rowScanner) (Skeleton, error) {
-	var record Skeleton
-	err := row.Scan(&record.ID, &record.TenantID, &record.Name, &record.CreatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Skeleton{}, ErrNotFound
-	}
-	if err != nil {
-		return Skeleton{}, err
-	}
-	record.CreatedAt = record.CreatedAt.UTC()
-	return record, nil
+	return r.inner.Delete(ctx, grant, id, false)
 }

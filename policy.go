@@ -1,80 +1,113 @@
-package skeleton
+package whatsapp
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/arandu-io/framework/security"
+
+	"github.com/hyz-is/arandu-whatsapp/internal/authz"
 )
 
-// The actions of Skeleton. Constants rather than strings at the call site: a
-// typo in an action name would silently authorize nothing, or worse, everything.
-//
-// They carry the entity in the name because an application registers many
-// packages, and the name of an action shows up in logs and in audit trails
-// where "view" on its own says nothing about what was viewed.
+// Instance actions identify permissions for instance lifecycle operations.
 const (
-	// SkeletonView is reading one record.
-	SkeletonView security.Action = "skeleton.view"
-	// SkeletonList is paging through the records.
-	SkeletonList security.Action = "skeleton.list"
-	// SkeletonCreate is adding one.
-	SkeletonCreate security.Action = "skeleton.create"
-	// SkeletonUpdate is changing one.
-	SkeletonUpdate security.Action = "skeleton.update"
-	// SkeletonDelete is removing one.
-	SkeletonDelete security.Action = "skeleton.delete"
+	ActionInstanceCreate security.Action = authz.ActionInstanceCreate
+	ActionInstanceList   security.Action = authz.ActionInstanceList
+	ActionInstanceView   security.Action = authz.ActionInstanceView
+	ActionInstanceUpdate security.Action = authz.ActionInstanceUpdate
+	ActionInstanceDelete security.Action = authz.ActionInstanceDelete
 )
 
-// SkeletonPolicy is the only authority over who does what with a Skeleton.
-//
-// IT DENIES EVERYTHING, and that is the state to start from rather than a
-// placeholder to delete. A policy shipped with a branch that allows every
-// action is a hole in every application that installs the package, and the hole
-// looks like working code until somebody reads it.
-//
-// There is deliberately no such branch to remove. Open one action at a time,
-// inside the custom block below, saying who may take it and on which record --
-// what is not written there stays closed, including every action added later.
-type SkeletonPolicy struct{}
+// Connection actions identify permissions for pairing and session operations.
+const (
+	ActionConnectionPair   security.Action = authz.ActionConnectionPair
+	ActionConnectionView   security.Action = authz.ActionConnectionView
+	ActionConnectionLogout security.Action = authz.ActionConnectionLogout
+)
 
-// Compile-time proof that the policy answers about this entity and no other. A
-// policy that drifted onto another type would leave this one unguarded, and the
-// repository would still compile.
-var _ security.Policy[Skeleton] = SkeletonPolicy{}
+// Webhook actions identify permissions for webhook configuration operations.
+const (
+	ActionWebhookSet  security.Action = authz.ActionWebhookSet
+	ActionWebhookView security.Action = authz.ActionWebhookView
+)
 
-// Can decides whether the subject may perform the action on the record.
-//
-// It is the only place that decides. Nothing reaches the repository without a
-// Grant, and the only way to obtain a Grant is for this method to return nil.
-func (SkeletonPolicy) Can(ctx context.Context, s security.Subject, a security.Action, record Skeleton) error {
-	// Tenant isolation comes first and applies to every action. Without it every
-	// check below would be pointless in a multi-tenant system: a rule that
-	// allows an owner to read their own record would allow it across customers
-	// as soon as two of them have a record with the same identifier.
-	//
-	// The empty id is the candidate that has not been stored yet, which belongs
-	// to nobody until it is written with the tenant off the Grant.
-	if record.ID != "" && record.TenantID != s.Tenant {
-		return fmt.Errorf("skeleton belongs to another tenant")
+// Message actions identify permissions for message operations.
+const (
+	ActionMessageSend          security.Action = authz.ActionMessageSend
+	ActionMessageList          security.Action = authz.ActionMessageList
+	ActionMessageRead          security.Action = authz.ActionMessageRead
+	ActionMessageDelete        security.Action = authz.ActionMessageDelete
+	ActionMessageEdit          security.Action = authz.ActionMessageEdit
+	ActionMessageMediaDownload security.Action = authz.ActionMessageMediaDownload
+)
+
+// Contact, chat, profile and call actions identify their respective permissions.
+const (
+	ActionContactCheck       security.Action = authz.ActionContactCheck
+	ActionChatArchive        security.Action = authz.ActionChatArchive
+	ActionProfilePictureView security.Action = authz.ActionProfilePictureView
+	ActionCallReject         security.Action = authz.ActionCallReject
+)
+
+// Group actions identify permissions for group operations.
+const (
+	ActionGroupCreate            security.Action = authz.ActionGroupCreate
+	ActionGroupPictureUpdate     security.Action = authz.ActionGroupPictureUpdate
+	ActionGroupInviteView        security.Action = authz.ActionGroupInviteView
+	ActionGroupInviteRevoke      security.Action = authz.ActionGroupInviteRevoke
+	ActionGroupParticipantUpdate security.Action = authz.ActionGroupParticipantUpdate
+	ActionGroupLeave             security.Action = authz.ActionGroupLeave
+)
+
+// ActionRuntime identifies the internal permission used by background work.
+const ActionRuntime security.Action = authz.ActionRuntime
+
+var publicActions = [...]security.Action{
+	ActionInstanceCreate, ActionInstanceList, ActionInstanceView, ActionInstanceUpdate, ActionInstanceDelete,
+	ActionConnectionPair, ActionConnectionView, ActionConnectionLogout,
+	ActionWebhookSet, ActionWebhookView,
+	ActionMessageSend, ActionMessageList, ActionMessageRead, ActionMessageDelete,
+	ActionMessageEdit, ActionMessageMediaDownload, ActionContactCheck, ActionChatArchive,
+	ActionProfilePictureView, ActionCallReject, ActionGroupCreate, ActionGroupPictureUpdate,
+	ActionGroupInviteView, ActionGroupInviteRevoke, ActionGroupParticipantUpdate, ActionGroupLeave,
+}
+
+// Actions is a snapshot of the complete public permission vocabulary.
+var Actions = append([]security.Action(nil), publicActions[:]...)
+
+// InstancePolicy protects every operation on WhatsApp instances and their
+// children. No role is enabled unless Config.Policy explicitly lists it.
+type InstancePolicy struct{ roles map[security.Action][]string }
+
+// NewInstancePolicy builds a default-deny policy from typed role mappings.
+func NewInstancePolicy(cfg PolicyConfig) InstancePolicy {
+	roles := make(map[security.Action][]string, len(cfg.Roles))
+	for action, allowed := range cfg.Roles {
+		roles[action] = append([]string(nil), allowed...)
 	}
+	return InstancePolicy{roles: roles}
+}
 
-	// arandu:begin custom
-	// The rules of this package go here, one action at a time. A rule that
-	// depends on the record and not only on the role is written the same way:
-	//
-	//	if a == SkeletonView && (s.ID == record.ID || s.HasRole("admin")) {
-	//		return nil
-	//	}
-	//
-	// A guest is a reader the caller declared anonymous on purpose, and is the
-	// only subject that arrives without an id. Answer it explicitly or it falls
-	// through to the refusal below, which is the safe direction:
-	//
-	//	if a == SkeletonView && s.IsGuest() && record.Published {
-	//		return nil
-	//	}
-	// arandu:end custom
+var _ security.Policy[Instance] = InstancePolicy{}
 
-	return fmt.Errorf("no rule allows %s on skeleton", a)
+// Can decides whether a subject may perform an action on an instance.
+func (p InstancePolicy) Can(_ context.Context, subject security.Subject, action security.Action, instance Instance) error {
+	if instance.TenantID != "" && instance.TenantID != subject.Tenant {
+		return fmt.Errorf("whatsapp instance belongs to another tenant")
+	}
+	for _, role := range p.roles[action] {
+		if subject.HasRole(role) {
+			return nil
+		}
+	}
+	return fmt.Errorf("no configured role allows %s", action)
+}
+
+func isWhatsAppAction(action security.Action) bool {
+	for _, candidate := range publicActions {
+		if action == candidate {
+			return true
+		}
+	}
+	return false
 }

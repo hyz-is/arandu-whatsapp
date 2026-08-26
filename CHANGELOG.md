@@ -1,6 +1,6 @@
 # Changelog
 
-Everything worth knowing about a release of :package_name is recorded here.
+Everything worth knowing about a release of WhatsApp is recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -12,4 +12,29 @@ a release is corrected by another release and never by moving a tag.
 
 ### Added
 
-- Nothing yet.
+- Initial Arandu module with 36 WhatsApp API routes.
+- Arandu session authentication and default-deny role policy.
+- Tenant-scoped PostgreSQL and SQLite repositories.
+- Four ordered Foundation migrations: three reversible package schema
+  migrations and one non-reversible WhatsMeow store upgrade delegated to its
+  upstream container.
+- Durable webhook delivery snapshots and retries through Hesape's native
+  database queue, with a stable `X-Arandu-Delivery-ID` idempotency key.
+- Durable mention-all snapshots and native processing/retention jobs whose
+  serialized payload contains only the process id.
+- Explicit Boot, Start, Health and Close lifecycle integration.
+- Typed WhatsApp, persistence, webhook, processing and media configuration.
+- OpenAPI, messaging, Passkey, webhook and migration documentation.
+
+### Changed
+
+- Instance listing now uses tenant-scoped keyset pagination with an opaque
+  `nextCursor`, a default page size of 200 and a hard maximum of 200.
+- Phone-code pairing now accepts `phoneNumber` in a validated JSON body at
+  `POST /instances/{instance}/connection/phone`; the phone-in-path route was
+  removed.
+
+### Fixed
+
+- Public service and repository errors now expose stable package sentinels for
+  `errors.Is` without requiring consumers to import internal packages.
