@@ -107,15 +107,20 @@ evidence that an installer can fetch it.
 
 A published Go module version is **immutable**. The proxy serves it forever, and
 a mistake is corrected by another release, never by moving a tag. That is the
-reason `CHANGELOG.md` says so and the reason a migration name is fixed once it
-has shipped.
+reason a migration name is fixed once it has shipped.
+
+Work lands on `develop` and reaches `main` as a fast-forward; the tag is cut on
+`main`. Pushing it runs `.github/workflows/release.yml`, which publishes the
+GitHub release and prepends its notes to `CHANGELOG.md`. The file is written by
+the release and is never edited by hand, so what a version claims lives in the
+release notes and nowhere else.
 
 Before tagging:
 
 - the four gates pass with `GOWORK=off`;
 - `arandu.mod.toml` matches the code;
-- `CHANGELOG.md` has the entry, under the version, in the Keep a Changelog
-  sections — `Added`, `Changed`, `Fixed`, `Removed`.
+- the release notes say what changed, under `Added`, `Changed`, `Fixed` and
+  `Removed` headings.
 
 While the version starts with `v0.`, breaking is allowed — freezing a shape this
 early is worse. Breaking *quietly* is not. A field that stops existing is a
