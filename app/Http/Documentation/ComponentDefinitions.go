@@ -1,0 +1,42 @@
+package apidocs
+
+var parameterDefinitions = []parameterDefinition{
+	{component: "WhatsAppInstanceName", name: "instance", location: "path", required: true, schema: `{"type":"string","minLength":1,"maxLength":255}`},
+	{component: "WhatsAppGroup", name: "group", location: "path", required: true, schema: `{"type":"string","description":"WhatsApp group JID."}`},
+	{component: "WhatsAppMessage", name: "message", location: "path", required: true, schema: `{"type":"string","description":"Positive local ID for DELETE; local ID or WhatsApp key ID for PUT."}`},
+}
+
+var responseDefinitions = []responseDefinition{
+	{component: "WhatsAppInstanceDeleted", description: "Instance and owned state deleted.", contentType: "application/json", schemaComponent: "WhatsAppInstanceDeletedEnvelope"},
+	{component: "WhatsAppQRCodeConnection", description: "QR pairing state and current code.", contentType: "application/json", schemaComponent: "WhatsAppQRCodeConnectionEnvelope"},
+	{component: "WhatsAppPhonePairing", description: "Phone pairing code created.", contentType: "application/json", schemaComponent: "WhatsAppPhonePairingEnvelope"},
+	{component: "WhatsAppPasskeyChallenge", description: "Active WebAuthn challenge.", contentType: "application/json", schemaComponent: "WhatsAppPasskeyChallengeEnvelope"},
+	{component: "WhatsAppPasskeyAssertionAccepted", description: "WebAuthn assertion accepted for WhatsApp confirmation.", contentType: "application/json", schemaComponent: "WhatsAppPasskeyAssertionEnvelope"},
+	{component: "WhatsAppConnectionState", description: "Current WhatsApp connection state.", contentType: "application/json", schemaComponent: "WhatsAppConnectionStateEnvelope"},
+	{component: "WhatsAppLogout", description: "WhatsApp session logged out.", contentType: "application/json", schemaComponent: "WhatsAppLogoutEnvelope"},
+	{component: "WhatsAppWebhook", description: "Instance webhook configuration.", contentType: "application/json", schemaComponent: "WhatsAppWebhookEnvelope"},
+	{component: "WhatsAppMessageFound", description: "Persisted message.", contentType: "application/json", schemaComponent: "WhatsAppMessageEnvelope"},
+	{component: "WhatsAppMessageList", description: "Page of persisted messages and updates.", contentType: "application/json", schemaComponent: "WhatsAppMessageListEnvelope"},
+	{component: "WhatsAppMessagesRead", description: "Messages marked as read.", contentType: "application/json", schemaComponent: "WhatsAppMessagesReadEnvelope"},
+	{component: "WhatsAppContactsChecked", description: "WhatsApp registration results.", contentType: "application/json", schemaComponent: "WhatsAppContactsEnvelope"},
+	{component: "WhatsAppProfilePicture", description: "Profile picture URL, or null when none is set.", contentType: "application/json", schemaComponent: "WhatsAppProfilePictureEnvelope"},
+	{component: "WhatsAppGroupInfo", description: "WhatsApp group information.", contentType: "application/json", schemaComponent: "WhatsAppGroupInfoEnvelope"},
+	{component: "WhatsAppGroupInvite", description: "WhatsApp group invitation code.", contentType: "application/json", schemaComponent: "WhatsAppGroupInviteEnvelope"},
+	{component: "WhatsAppInstanceCreated", description: "Instance created.", contentType: "application/json", schemaComponent: "WhatsAppInstanceEnvelope"},
+	{component: "WhatsAppInstanceFound", description: "Instance found.", contentType: "application/json", schemaComponent: "WhatsAppInstanceEnvelope"},
+	{component: "WhatsAppInstanceList", description: "Tenant-scoped instance list.", contentType: "application/json", schemaComponent: "WhatsAppInstanceCollectionEnvelope"},
+	{component: "WhatsAppForbidden", description: "Session, tenant scope or configured role refused the action.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppNotFound", description: "Requested tenant-scoped resource was not found.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppConflict", description: "Current connection, pairing or dependency state conflicts with the request.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppGone", description: "Ephemeral pairing state expired.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppUnprocessableEntity", description: "The input was understood but cannot be applied.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppMessageSent", description: "Message sent synchronously and persisted.", contentType: "application/json", schemaComponent: "WhatsAppMessageEnvelope"},
+	{component: "WhatsAppAccepted", description: "Durable snapshot and native database job committed for asynchronous mentionAll processing.", contentType: "application/json", schemaComponent: "WhatsAppProcessingAcceptedEnvelope"},
+	{component: "WhatsAppBadRequest", description: "Invalid request.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppServiceUnavailable", description: "WhatsApp or another required upstream service is unavailable.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppRequestTimeout", description: "QR pairing timed out before a code was available.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppNotAcceptable", description: "A dependent lookup or persistence operation failed.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppPayloadTooLarge", description: "JSON, multipart or downloaded media exceeded the configured limit.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppUnsupportedMediaType", description: "The uploaded or downloaded media type is unsupported.", contentType: "application/json", schemaComponent: "WhatsAppErrorEnvelope"},
+	{component: "WhatsAppInternalServerError", description: "Internal failure. Unknown errors are rendered by the host framework and do not promise the module ErrorEnvelope.", contentType: "", schemaComponent: ""},
+}

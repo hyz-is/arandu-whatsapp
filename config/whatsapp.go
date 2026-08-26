@@ -1,4 +1,5 @@
-package whatsapp
+// Package config defines the WhatsApp module's typed configuration.
+package config
 
 import (
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/arandu-io/framework/security"
 
+	"github.com/hyz-is/arandu-whatsapp/app/Enums"
 	internalconfig "github.com/hyz-is/arandu-whatsapp/internal/config"
 	"github.com/hyz-is/arandu-whatsapp/internal/message"
 	webhooksvc "github.com/hyz-is/arandu-whatsapp/internal/webhook"
@@ -237,7 +239,7 @@ func (c Config) Validate() error {
 		}
 	}
 	for action, roles := range c.Policy.Roles {
-		if !isWhatsAppAction(action) {
+		if !enums.IsWhatsAppAction(action) {
 			return fmt.Errorf("whatsapp: Config.Policy contains unknown action %q", action)
 		}
 		for _, role := range roles {
@@ -249,7 +251,8 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) withDefaults() Config {
+// WithDefaults returns configuration with every optional zero value normalized.
+func WithDefaults(c Config) Config {
 	if c.Prefix == "" {
 		c.Prefix = DefaultPrefix
 	}
@@ -327,17 +330,4 @@ func (c Config) withDefaults() Config {
 		c.Media.ProcessingTimeout = media.ProcessingTimeout
 	}
 	return c
-}
-
-func (c Config) internalWhatsApp() internalconfig.WhatsAppConfig {
-	return internalconfig.WhatsAppConfig{
-		QRCodeLimit: c.WhatsApp.QRCodeLimit, QRCodeExpirationTime: c.WhatsApp.QRCodeExpiration,
-		QRCodeLightColor: c.WhatsApp.QRCodeLightColor, QRCodeDarkColor: c.WhatsApp.QRCodeDarkColor,
-		SessionPhoneClient: c.WhatsApp.SessionPhoneClient, SessionPhoneName: c.WhatsApp.SessionPhoneName,
-		PairingTimeout: c.WhatsApp.PairingTimeout, AutoReconnect: c.WhatsApp.AutoReconnect,
-		StartupReconnectConcurrency: c.WhatsApp.StartupReconnectConcurrency,
-		ConnectTimeout:              c.WhatsApp.ConnectTimeout, ReconnectInitialDelay: c.WhatsApp.ReconnectInitialDelay,
-		ReconnectMaxDelay: c.WhatsApp.ReconnectMaxDelay, ProfilePictureTimeout: c.WhatsApp.ProfilePictureTimeout,
-		AddressCacheTTL: c.WhatsApp.AddressCacheTTL,
-	}
 }

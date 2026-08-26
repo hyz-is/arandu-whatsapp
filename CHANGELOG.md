@@ -24,7 +24,9 @@ a release is corrected by another release and never by moving a tag.
   serialized payload contains only the process id.
 - Explicit Boot, Start, Health and Close lifecycle integration.
 - Typed WhatsApp, persistence, webhook, processing and media configuration.
-- OpenAPI, messaging, Passkey, webhook and migration documentation.
+- Native Arandu Swagger integration that publishes the 36-route OpenAPI 3.1
+  contract from the runtime route table, plus messaging, Passkey, webhook and
+  migration guides.
 
 ### Changed
 

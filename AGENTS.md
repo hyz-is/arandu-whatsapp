@@ -4,7 +4,10 @@ This is an Arandu WhatsApp module with an explicit lifecycle, 36 HTTP routes,
 tenant-scoped persistence and four Foundation migrations. It is a Go module
 somebody `go get`s and registers by hand in `bootstrap/app.go`. There is no
 service provider, container lookup or discovery: wiring is
-`New(cfg, db, sessions)` followed by kernel registration.
+`New(cfg, db, sessions)` followed by kernel registration. Applications that
+publish OpenAPI construct `github.com/hyz-is/arandu-swagger`, pass it through
+`NewWithDocumentation`, and register the Swagger module explicitly after this
+module.
 
 Read `.agents/skills/` before writing code. Each skill is a procedure, and the
 one you need is named by the situation you are in.
@@ -64,24 +67,34 @@ application that installs this one, not here.
 
 | | measured with |
 | --- | --- |
-| 36 named routes | `grep -c 'register(stdhttp' routes.go` |
+| 36 named routes | `grep -c 'register(stdhttp' routes/web.go` |
+| 36 documented operations | `grep -c '^\s*"whatsapp\.' app/Http/Documentation/OperationDefinitions.go` and the generated-contract parity test |
 | 27 declared actions: 26 public plus the internal runtime action | `grep -c 'security.Action = "whatsapp' internal/authz/actions.go` |
-| 4 ordered migrations, 3 reversible | `grep -c 'GetName() string' migrations.go` |
+| 4 ordered migrations, 3 reversible | `grep -Rh 'GetName() string' database/migrations/*.go \| wc -l` |
 | PostgreSQL and SQLite runtime support | `New` dialect validation and migration tests |
 
-The layout is by role rather than by layer, so the package reads top to bottom:
+The root is the package-skeleton interface; the implementation follows the
+native Arandu application tree. Subpackages never import the root compatibility
+facade:
 
 ```text
-module.go                 Arandu wiring and lifecycle
-config.go                 typed configuration
-model.go                  public entity and resources
-policy.go                 action vocabulary and role policy
-repository.go             public Grant-first repository
-service.go                authorized domain facade
-routes.go                 canonical named HTTP surface
-handlers_*.go             request and response adapters
-migrations.go             Foundation migrations
-internal/                 WhatsApp domain and persistence runtime
+module.go                         Arandu wiring and lifecycle
+contracts.go, errors.go, exports_*.go
+                                  stable package-skeleton interface
+config/whatsapp.go                typed configuration
+app/Enums/                        action vocabulary
+app/Models/                       entities, shared contracts and errors
+app/Policies/                     default-deny policies
+app/Repositories/                 public Grant-first repositories
+app/Services/                     authorized domain rules
+app/Http/Requests/                typed request contracts
+app/Http/Resources/               explicit response fields
+app/Http/Controllers/             thin request/response adapters
+app/Http/Documentation/           native Arandu Swagger contract (`package apidocs`; `documentation` is reserved by Go tooling)
+app/Jobs/                         native queue vocabulary
+routes/web.go                     canonical named HTTP surface
+database/migrations/              ordered Foundation migrations
+internal/                         private WhatsApp and persistence runtime
 ```
 
 ## What does not exist here
@@ -99,6 +112,7 @@ rejected in review. None of them is missing by accident.
 | an `interface{}` config, a map of options, an env var read at call time | the typed `Config` struct, validated by `New` |
 | a `panic` on bad wiring | an `error` from `New`. A wiring mistake found at boot costs one restart |
 | a webhook cache, channel queue or module-owned delivery goroutine | tenant-scoped SQL snapshots plus Hesape's durable `DatabaseQueue` for webhooks and mention-all; the installer explicitly calls `RegisterJobHandlers` and owns `aru queue:work` |
+| a static OpenAPI document or a route table copied into documentation | `routes/web.go` owns method, path and name; `app/Http/Documentation` adds the explicit operation and component contract through Arandu Swagger |
 
 ## The four properties
 

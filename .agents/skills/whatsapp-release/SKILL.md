@@ -95,6 +95,14 @@ If something genuinely has to come in, it goes with a note in the pull request
 saying what it does that the framework does not, and the manifest changes in the
 same commit if it can reach the network, the filesystem or another process.
 
+A relative `replace` is only a local integration aid and is never releasable.
+Before the gates that approve a WhatsApp release, every direct dependency must
+resolve from its canonical remote path with `GOWORK=off` and no `replace`. In
+particular, publish and verify `github.com/hyz-is/arandu-swagger` first, then
+pin that immutable version here. Prove the dependency from a clean temporary
+consumer with `go mod download` or `go get`; a neighboring checkout is not
+evidence that an installer can fetch it.
+
 ## Publishing
 
 A published Go module version is **immutable**. The proxy serves it forever, and

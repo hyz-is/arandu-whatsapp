@@ -5,8 +5,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -61,43 +59,6 @@ func TestModuleRegistersCanonicalRouteSurface(t *testing.T) {
 	}
 	if len(got) != 36 {
 		t.Fatalf("registered %d routes, want 36", len(got))
-	}
-	contractPath := filepath.Join("..", "..", "docs", "openapi.yaml")
-	contract, err := os.ReadFile(contractPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", contractPath, err)
-	}
-	text := string(contract)
-	if count := strings.Count(text, "operationId:"); count != len(names) {
-		t.Fatalf("OpenAPI declares %d operationIds, want %d", count, len(names))
-	}
-	for name := range names {
-		if count := strings.Count(text, "operationId: "+name+"\n"); count != 1 {
-			t.Errorf("OpenAPI operationId %q occurs %d times", name, count)
-		}
-	}
-	if strings.Contains(text, "/connection/phone/{phone}") {
-		t.Error("OpenAPI still exposes a phone number in the route path")
-	}
-	if !strings.Contains(text, "/instances/{instance}/connection/phone:\n") ||
-		!strings.Contains(text, "$ref: '#/components/schemas/PhonePairingRequest'") {
-		t.Error("OpenAPI does not declare the JSON phone-pairing request")
-	}
-	for _, field := range []string{"nextCursor:", "perPage:", "maximum: 200"} {
-		if !strings.Contains(text, field) {
-			t.Errorf("OpenAPI instance pagination is missing %q", field)
-		}
-	}
-	for _, stale := range []string{
-		"id: {type: integer, format: int32",
-		"instanceId: {type: integer, format: int32",
-	} {
-		if strings.Contains(text, stale) {
-			t.Errorf("OpenAPI still declares a database identifier as int32: %q", stale)
-		}
-	}
-	if !strings.Contains(text, "id:\n          type: integer\n          format: int64") {
-		t.Error("OpenAPI instance identifier is not declared as int64")
 	}
 }
 

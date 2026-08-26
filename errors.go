@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"github.com/arandu-io/framework/security"
 
+	models "github.com/hyz-is/arandu-whatsapp/app/Models"
 	"github.com/hyz-is/arandu-whatsapp/internal/chat"
 	internalrepo "github.com/hyz-is/arandu-whatsapp/internal/database/repository"
 	"github.com/hyz-is/arandu-whatsapp/internal/group"
@@ -15,31 +16,31 @@ var (
 	// ErrForbidden means authorization, tenant scope or Grant validation refused an operation.
 	ErrForbidden = security.ErrForbidden
 	// ErrInstanceNotFound means the requested instance does not exist in the Grant tenant.
-	ErrInstanceNotFound = internalrepo.ErrInstanceNotFound
+	ErrInstanceNotFound = models.ErrInstanceNotFound
 	// ErrInstanceNameAlreadyExists means the Grant tenant already owns the requested name.
-	ErrInstanceNameAlreadyExists = internalrepo.ErrInstanceNameAlreadyExists
+	ErrInstanceNameAlreadyExists = models.ErrInstanceNameAlreadyExists
 	// ErrInstanceHasDependencies means a non-forced delete found owned records.
-	ErrInstanceHasDependencies = internalrepo.ErrInstanceHasDependencies
+	ErrInstanceHasDependencies = models.ErrInstanceHasDependencies
 	// ErrWhatsAppDeviceAlreadyLinked means the device is already assigned to another instance.
-	ErrWhatsAppDeviceAlreadyLinked = internalrepo.ErrWhatsAppDeviceAlreadyLinked
+	ErrWhatsAppDeviceAlreadyLinked = models.ErrWhatsAppDeviceAlreadyLinked
 	// ErrWebhookAlreadyExists means an instance already owns a webhook configuration.
-	ErrWebhookAlreadyExists = internalrepo.ErrWebhookAlreadyExists
+	ErrWebhookAlreadyExists = models.ErrWebhookAlreadyExists
 	// ErrWebhookNotFound means the requested webhook configuration does not exist.
-	ErrWebhookNotFound = internalrepo.ErrWebhookNotFound
+	ErrWebhookNotFound = models.ErrWebhookNotFound
 	// ErrMessageNotFound means the requested persisted message does not exist.
-	ErrMessageNotFound = internalrepo.ErrMessageNotFound
+	ErrMessageNotFound = models.ErrMessageNotFound
 	// ErrInvalidWebhookEvent means a webhook event name is unsupported.
-	ErrInvalidWebhookEvent = internalrepo.ErrInvalidWebhookEvent
+	ErrInvalidWebhookEvent = models.ErrInvalidWebhookEvent
 	// ErrInvalidWebhookURL means a webhook destination is not acceptable.
-	ErrInvalidWebhookURL = internalrepo.ErrInvalidWebhookURL
+	ErrInvalidWebhookURL = models.ErrInvalidWebhookURL
 	// ErrInvalidJSON means a JSON field is syntactically invalid or has the wrong shape.
-	ErrInvalidJSON = internalrepo.ErrInvalidJSON
+	ErrInvalidJSON = models.ErrInvalidJSON
 	// ErrInvalidEnum means a persisted enum value is unsupported.
-	ErrInvalidEnum = internalrepo.ErrInvalidEnum
+	ErrInvalidEnum = models.ErrInvalidEnum
 	// ErrInvalidInput means a public operation received invalid input.
-	ErrInvalidInput = internalrepo.ErrInvalidInput
+	ErrInvalidInput = models.ErrInvalidInput
 	// ErrInvalidCursor means an instance page cursor is malformed or outside the scoped result set.
-	ErrInvalidCursor = internalrepo.ErrInvalidCursor
+	ErrInvalidCursor = models.ErrInvalidCursor
 
 	// ErrConnectionInProgress means another pairing or connection attempt owns the instance.
 	ErrConnectionInProgress = internalwhatsapp.ErrConnectionInProgress

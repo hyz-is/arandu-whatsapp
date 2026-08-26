@@ -1,9 +1,7 @@
-package whatsapp
+// Package enums declares the WhatsApp module's shared value vocabularies.
+package enums
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/arandu-io/framework/security"
 
 	"github.com/hyz-is/arandu-whatsapp/internal/authz"
@@ -49,7 +47,7 @@ const (
 	ActionCallReject         security.Action = authz.ActionCallReject
 )
 
-// Group actions identify permissions for group operations.
+// Group actions identify their respective group permissions.
 const (
 	ActionGroupCreate            security.Action = authz.ActionGroupCreate
 	ActionGroupPictureUpdate     security.Action = authz.ActionGroupPictureUpdate
@@ -75,35 +73,8 @@ var publicActions = [...]security.Action{
 // Actions is a snapshot of the complete public permission vocabulary.
 var Actions = append([]security.Action(nil), publicActions[:]...)
 
-// InstancePolicy protects every operation on WhatsApp instances and their
-// children. No role is enabled unless Config.Policy explicitly lists it.
-type InstancePolicy struct{ roles map[security.Action][]string }
-
-// NewInstancePolicy builds a default-deny policy from typed role mappings.
-func NewInstancePolicy(cfg PolicyConfig) InstancePolicy {
-	roles := make(map[security.Action][]string, len(cfg.Roles))
-	for action, allowed := range cfg.Roles {
-		roles[action] = append([]string(nil), allowed...)
-	}
-	return InstancePolicy{roles: roles}
-}
-
-var _ security.Policy[Instance] = InstancePolicy{}
-
-// Can decides whether a subject may perform an action on an instance.
-func (p InstancePolicy) Can(_ context.Context, subject security.Subject, action security.Action, instance Instance) error {
-	if instance.TenantID != "" && instance.TenantID != subject.Tenant {
-		return fmt.Errorf("whatsapp instance belongs to another tenant")
-	}
-	for _, role := range p.roles[action] {
-		if subject.HasRole(role) {
-			return nil
-		}
-	}
-	return fmt.Errorf("no configured role allows %s", action)
-}
-
-func isWhatsAppAction(action security.Action) bool {
+// IsWhatsAppAction reports whether action belongs to the public permission vocabulary.
+func IsWhatsAppAction(action security.Action) bool {
 	for _, candidate := range publicActions {
 		if action == candidate {
 			return true

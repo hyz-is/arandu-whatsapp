@@ -1,6 +1,6 @@
 ---
 name: whatsapp-package
-description: Install, wire and use the WhatsApp package (Go, Arandu) in an application. Use when the request is to install the module, register it, configure its 36 routes, open explicit role actions, diagnose 403 responses or apply its schema. Covers New(cfg, db, sessions), lifecycle ownership, typed configuration, Arandu sessions, default-deny Policy.Roles and aru migrate.
+description: Install, wire and use the WhatsApp package (Go, Arandu) in an application. Use when the request is to install the module, register it, configure its 36 routes, publish Swagger/OpenAPI, open explicit role actions, diagnose 403 responses or apply its schema. Covers New(cfg, db, sessions), NewWithDocumentation, lifecycle ownership, typed configuration, Arandu sessions, default-deny Policy.Roles and aru migrate.
 license: MIT
 ---
 
@@ -17,10 +17,11 @@ is no service provider, container lookup or discovery.
 go get github.com/hyz-is/arandu-whatsapp
 ```
 
-## The three lines of wiring, and where each one goes
+## The base wiring, and where each line goes
 
-All three are in `bootstrap/app.go`. Nothing else in the application changes,
-and `aru make:module` does not edit this file for you.
+The module wiring is in `bootstrap/app.go`, and `aru make:module` does not edit
+this file for you. Documentation adds the explicit optional wiring described
+below.
 
 The import, with the other module imports:
 
@@ -58,6 +59,24 @@ And the registration, inside the `k.Register(...)` call already there:
 configuration that cannot work, a nil database handle and a nil session store,
 so a wiring mistake costs one restart instead of arriving as a nil dereference
 on the first request that needed it.
+
+## Optional Arandu Swagger wiring
+
+Install `github.com/hyz-is/arandu-swagger`, construct one Swagger module in
+`bootstrap/app.go`, and let the application's typed configuration or dotenv
+loader decide its `Enabled` value. The packages do not read environment
+variables themselves.
+
+Pass that module to `whatsapp.NewWithDocumentation(cfg, db, sessions, docs)`
+instead of `New`, then register `docs` after the WhatsApp module. Configure
+`UIPath` and `SpecPath` on `swagger.Config`; they default to `/docs` and
+`/docs/openapi.json`. `Enabled: false` registers neither route.
+
+The Swagger routes have no built-in authorization. Supply the application's
+access middleware through both `UIMiddleware` and `SpecMiddleware` before
+enabling them outside a trusted development environment. The WhatsApp module
+only contributes its 36 named operations and reusable components; the host
+owns the Swagger lifecycle and route permissions.
 
 ## Then run the migrations
 
@@ -97,8 +116,11 @@ and the service refuses any authenticated subject whose tenant differs from
 
 All 36 named routes live below `/whatsapp/instances` by default. They cover
 instances, connections and Passkey pairing, webhooks, messaging, contacts,
-media, chats, calls and groups. Use `aru route:list` or `docs/openapi.yaml` for
-the exact method, path and route name. A custom `Prefix` moves every path while
+media, chats, calls and groups. Use `aru route:list` for the exact runtime
+method, path and route name. When the host explicitly installs
+`github.com/hyz-is/arandu-swagger`, the complete generated contract is served
+from its configured specification path when `Enabled` is true;
+`/docs/openapi.json` is the default. A custom `Prefix` moves every path while
 route names remain stable.
 
 Authentication comes from the host Arandu session (`arandu_session`) and every

@@ -1,4 +1,4 @@
-package whatsapp
+package controllers
 
 import (
 	"encoding/json"
@@ -12,8 +12,11 @@ import (
 	"github.com/arandu-io/framework/security"
 	"github.com/arandu-io/hesape/http/resources"
 
+	models "github.com/hyz-is/arandu-whatsapp/app/Models"
+	services "github.com/hyz-is/arandu-whatsapp/app/Services"
+	config "github.com/hyz-is/arandu-whatsapp/config"
+
 	"github.com/hyz-is/arandu-whatsapp/internal/chat"
-	internalrepo "github.com/hyz-is/arandu-whatsapp/internal/database/repository"
 	"github.com/hyz-is/arandu-whatsapp/internal/group"
 	"github.com/hyz-is/arandu-whatsapp/internal/message"
 	internalwhatsapp "github.com/hyz-is/arandu-whatsapp/internal/whatsapp"
@@ -22,7 +25,43 @@ import (
 
 var errMalformedRequest = errors.New("malformed request")
 
-func (m *Module) decodeJSON(ctx *fhttp.Context, dst any, allowEmpty, strict bool) error {
+// WhatsAppController adapts HTTP requests to the authorized application service.
+type WhatsAppController struct {
+	cfg      config.Config
+	service  *services.Service
+	sessions *security.SessionStore
+}
+
+// NewWhatsAppController returns the native HTTP controller.
+func NewWhatsAppController(cfg config.Config, service *services.Service, sessions *security.SessionStore) *WhatsAppController {
+	return &WhatsAppController{cfg: cfg, service: service, sessions: sessions}
+}
+
+// Subject obtains identity exclusively from the Arandu SessionStore.
+func (m *WhatsAppController) Subject(r *stdhttp.Request) security.Subject {
+	subject, err := m.sessions.Load(r.Context(), r)
+	if err != nil || subject.ID == "" {
+		return security.Guest(m.cfg.Tenant)
+	}
+	return subject
+}
+
+func structFields(value any) (map[string]any, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("encode response payload: %w", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return nil, fmt.Errorf("decode response payload: %w", err)
+	}
+	if fields == nil {
+		return nil, errors.New("response payload must be a JSON object")
+	}
+	return fields, nil
+}
+
+func (m *WhatsAppController) decodeJSON(ctx *fhttp.Context, dst any, allowEmpty, strict bool) error {
 	limit := m.cfg.Media.MaxInputBytes*2 + 1024*1024
 	if limit < 1024*1024 {
 		limit = 1024 * 1024
@@ -51,7 +90,7 @@ func (m *Module) decodeJSON(ctx *fhttp.Context, dst any, allowEmpty, strict bool
 	return nil
 }
 
-func (m *Module) answer(ctx *fhttp.Context, err error) error {
+func (m *WhatsAppController) answer(ctx *fhttp.Context, err error) error {
 	status, ok := statusForError(err)
 	if !ok {
 		return err
@@ -77,7 +116,7 @@ func answerStruct(ctx *fhttp.Context, status int, value any) error {
 
 func statusForError(err error) (int, bool) {
 	var validation chat.ValidationError
-	var dependencies *internalrepo.InstanceDependenciesError
+	var dependencies *models.InstanceDependenciesError
 	switch {
 	case err == nil:
 		return 0, false
@@ -86,11 +125,11 @@ func statusForError(err error) (int, bool) {
 		errors.Is(err, chat.ErrMessageNotOutgoing):
 		return stdhttp.StatusForbidden, true
 	case errors.Is(err, errMalformedRequest),
-		errors.Is(err, internalrepo.ErrInvalidInput),
-		errors.Is(err, internalrepo.ErrInvalidJSON),
-		errors.Is(err, internalrepo.ErrInvalidWebhookEvent),
-		errors.Is(err, internalrepo.ErrInvalidWebhookURL),
-		errors.Is(err, internalrepo.ErrInvalidCursor),
+		errors.Is(err, models.ErrInvalidInput),
+		errors.Is(err, models.ErrInvalidJSON),
+		errors.Is(err, models.ErrInvalidWebhookEvent),
+		errors.Is(err, models.ErrInvalidWebhookURL),
+		errors.Is(err, models.ErrInvalidCursor),
 		errors.Is(err, internalwhatsapp.ErrInvalidPhoneNumber),
 		errors.Is(err, message.ErrInvalidRequest),
 		errors.Is(err, message.ErrMentionAllRequiresGroup),
@@ -113,17 +152,17 @@ func statusForError(err error) (int, bool) {
 		return stdhttp.StatusBadRequest, true
 	case errors.As(err, &validation), errors.Is(err, chat.ErrMessageNotEditable):
 		return stdhttp.StatusUnprocessableEntity, true
-	case errors.Is(err, internalrepo.ErrInstanceNotFound),
-		errors.Is(err, internalrepo.ErrWebhookNotFound),
-		errors.Is(err, internalrepo.ErrMessageNotFound),
+	case errors.Is(err, models.ErrInstanceNotFound),
+		errors.Is(err, models.ErrWebhookNotFound),
+		errors.Is(err, models.ErrMessageNotFound),
 		errors.Is(err, internalwhatsapp.ErrPasskeyInstanceNotFound),
 		errors.Is(err, internalwhatsapp.ErrPairingSessionNotFound),
 		errors.Is(err, chat.ErrMediaMessageNotFound),
 		errors.Is(err, address.ErrRecipientNotOnWhatsApp):
 		return stdhttp.StatusNotFound, true
-	case errors.Is(err, internalrepo.ErrInstanceNameAlreadyExists),
-		errors.Is(err, internalrepo.ErrWhatsAppDeviceAlreadyLinked),
-		errors.Is(err, internalrepo.ErrWebhookAlreadyExists),
+	case errors.Is(err, models.ErrInstanceNameAlreadyExists),
+		errors.Is(err, models.ErrWhatsAppDeviceAlreadyLinked),
+		errors.Is(err, models.ErrWebhookAlreadyExists),
 		errors.Is(err, internalwhatsapp.ErrConnectionInProgress),
 		errors.Is(err, internalwhatsapp.ErrInstanceConnected),
 		errors.Is(err, internalwhatsapp.ErrPairingSessionNotActive),
@@ -183,7 +222,7 @@ func messagesForError(err error, status int) []string {
 	if errors.As(err, &validation) && len(validation.Messages) > 0 {
 		return validation.Messages
 	}
-	var dependencies *internalrepo.InstanceDependenciesError
+	var dependencies *models.InstanceDependenciesError
 	if errors.As(err, &dependencies) {
 		return []string{dependencies.Error()}
 	}

@@ -24,8 +24,9 @@ go get github.com/hyz-is/arandu-whatsapp
 ## Wire it
 
 An Arandu application registers a module explicitly. There is no service
-provider, no container and no discovery, so these are the lines to paste into
-`bootstrap/app.go` and there are no others.
+provider, no container and no discovery, so the base wiring stays visible in
+`bootstrap/app.go`. The optional documentation wiring is shown separately
+below.
 
 The import, with the other module imports:
 
@@ -223,9 +224,10 @@ routes for instances, pairing, connection state, webhooks, messages, contacts,
 media, chats, calls and groups. Requests authenticate exclusively through the
 Arandu session store.
 
-The exact paths, request bodies, response envelopes and status codes are in
-[docs/openapi.yaml](docs/openapi.yaml). Message, Passkey and webhook behavior is
-documented under [docs](docs).
+When the host installs and enables Arandu Swagger, the exact paths, request
+bodies, response envelopes and status codes are published from the same named
+routes that serve requests. Message, Passkey and webhook behavior is documented
+under [docs](docs).
 
 JSON responses use Arandu resources and are wrapped in `data`. Tenant IDs and
 the WhatsMeow device-store key are never exposed. Authorization failures use a
@@ -234,16 +236,29 @@ generic public message; internal policy details stay on the server.
 ## Layout
 
 ```text
-module.go                 Arandu wiring and lifecycle
-config.go                 typed configuration
-policy.go                 actions and default-deny policy
-repository.go             public Grant-first repository
-service.go                authorized domain facade
-routes.go                 canonical named HTTP surface
-handlers_*.go             thin request/response adapters
-migrations.go             ordered Foundation migrations
-internal/                 persistence and WhatsApp domain runtime
+module.go                         Arandu wiring and lifecycle
+contracts.go, errors.go, exports_*.go
+                                  stable root package interface
+config/whatsapp.go                typed configuration
+app/Enums/                        action vocabulary
+app/Models/                       entities and shared contracts
+app/Policies/                     default-deny authorization
+app/Repositories/                 Grant-first persistence facade
+app/Services/                     authorized domain rules
+app/Http/Requests/                typed request contracts
+app/Http/Resources/               explicit response fields
+app/Http/Controllers/             thin HTTP adapters
+app/Http/Documentation/           native Arandu Swagger contract
+app/Jobs/                         durable queue vocabulary
+routes/web.go                     canonical named HTTP surface
+database/migrations/              ordered Foundation migrations
+internal/                         private persistence and WhatsApp runtime
 ```
+
+The root aliases preserve the package-skeleton installation contract
+(`whatsapp.New`, `whatsapp.Config`, `whatsapp.Service`). Implementation packages
+follow the same responsibility tree as an Arandu application, and none imports
+the root facade.
 
 ## What is already correct, and has to stay that way
 
@@ -278,11 +293,52 @@ The host retains ownership of the database, SQL pool and session store.
 
 ## Documentation
 
+Documentation is optional and owned by the host application. Build one
+`arandu-swagger` module in `bootstrap/app.go`, using an application setting
+loaded from configuration or dotenv for `Enabled`, and register it last:
+
+```go
+docs, err := swagger.New(swagger.Config{
+	Enabled:  documentationEnabled,
+	Title:    "WhatsApp API",
+	Version:  "1.0.0",
+	UIPath:   "/docs",
+	SpecPath: "/docs/openapi.json",
+	Filter: swagger.RouteFilter{
+		IncludeModules: []string{"whatsapp"},
+	},
+	UIMiddleware:   []swagger.Middleware{requireDocumentationAccess},
+	SpecMiddleware: []swagger.Middleware{requireDocumentationAccess},
+})
+if err != nil {
+	return App{}, err
+}
+
+whatsappModule, err := whatsapp.NewWithDocumentation(
+	whatsappConfig,
+	db,
+	sessions,
+	docs,
+)
+if err != nil {
+	return App{}, err
+}
+
+k.Register(whatsappModule, docs)
+```
+
+`Enabled: false` registers neither the UI nor the specification route. When
+enabled, access to the configured `UIPath` and `SpecPath` is controlled by the
+application middleware supplied through `UIMiddleware` and `SpecMiddleware`.
+The package never reads environment variables itself. Applications that do not
+publish OpenAPI continue to use `whatsapp.New` unchanged.
+
 - [Message sending](docs/send-messages.md)
 - [Passkey pairing](docs/passkey-pairing.md)
 - [Webhooks](docs/webhooks.md)
 - [Migrations](docs/migrations.md)
-- [OpenAPI contract](docs/openapi.yaml)
+- Runtime OpenAPI contract: configured `SpecPath` (`/docs/openapi.json` by
+  default)
 
 ## Tests
 

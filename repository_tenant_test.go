@@ -11,6 +11,7 @@ import (
 	"github.com/arandu-io/hesape/database"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 
+	packagemigrations "github.com/hyz-is/arandu-whatsapp/database/migrations"
 	internalrepo "github.com/hyz-is/arandu-whatsapp/internal/database/repository"
 )
 
@@ -144,7 +145,7 @@ func migratedSQLite(t *testing.T, name string) *sql.DB {
 		"name":   migrationConnectionName,
 	}))
 	container := sqlstore.NewWithDB(db, "sqlite3", nil)
-	for _, migration := range whatsappMigrations(container) {
+	for _, migration := range packagemigrations.Migrations(container) {
 		if err := migration.Up(context.Background(), connection); err != nil {
 			db.Close()
 			t.Fatalf("apply %s: %v", migration.GetName(), err)

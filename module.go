@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	stdhttp "net/http"
 	"sync"
 
 	"github.com/arandu-io/framework/data"
@@ -14,14 +13,24 @@ import (
 	fhttp "github.com/arandu-io/framework/http"
 	"github.com/arandu-io/framework/security"
 	"github.com/arandu-io/hesape/queue"
+	swagger "github.com/hyz-is/arandu-swagger"
 
+	controllers "github.com/hyz-is/arandu-whatsapp/app/Http/Controllers"
+	appjobs "github.com/hyz-is/arandu-whatsapp/app/Jobs"
+	policies "github.com/hyz-is/arandu-whatsapp/app/Policies"
+	repositories "github.com/hyz-is/arandu-whatsapp/app/Repositories"
+	services "github.com/hyz-is/arandu-whatsapp/app/Services"
+	appconfig "github.com/hyz-is/arandu-whatsapp/config"
+	packagemigrations "github.com/hyz-is/arandu-whatsapp/database/migrations"
 	"github.com/hyz-is/arandu-whatsapp/internal/chat"
+	internalconfig "github.com/hyz-is/arandu-whatsapp/internal/config"
 	internalrepo "github.com/hyz-is/arandu-whatsapp/internal/database/repository"
 	"github.com/hyz-is/arandu-whatsapp/internal/group"
 	"github.com/hyz-is/arandu-whatsapp/internal/message"
 	webhooksvc "github.com/hyz-is/arandu-whatsapp/internal/webhook"
 	internalwhatsapp "github.com/hyz-is/arandu-whatsapp/internal/whatsapp"
 	"github.com/hyz-is/arandu-whatsapp/internal/whatsapp/address"
+	packageroutes "github.com/hyz-is/arandu-whatsapp/routes"
 )
 
 // Module wires the WhatsApp domain into the Arandu lifecycle. The database and
@@ -32,12 +41,15 @@ type Module struct {
 	db       *data.DB
 	sessions *security.SessionStore
 	logger   *slog.Logger
+	docs     swagger.Documenter
 
-	service           *Service
+	service           *services.Service
+	publicService     *Service
+	controller        *controllers.WhatsAppController
 	webhookManager    *webhooksvc.Manager
 	messageProcessor  *message.MessageProcessingManager
 	connections       *internalwhatsapp.Service
-	whatsMeowUpgrader whatsMeowSchemaUpgrader
+	whatsMeowUpgrader packagemigrations.SchemaUpgrader
 
 	mu          sync.RWMutex
 	lifecycle   context.Context
@@ -62,6 +74,10 @@ var (
 // changes. That keeps commands such as `aru migrate` and `aru route:list`
 // side-effect free.
 func New(cfg Config, db *data.DB, sessions *security.SessionStore) (*Module, error) {
+	return newModule(cfg, db, sessions, nil)
+}
+
+func newModule(cfg Config, db *data.DB, sessions *security.SessionStore, docs swagger.Documenter) (*Module, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -79,6 +95,7 @@ func New(cfg Config, db *data.DB, sessions *security.SessionStore) (*Module, err
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	appCfg := cfg.toAppConfig()
 	logger := slog.Default()
 	base := internalrepo.NewBase(db)
 	instances := internalrepo.NewInstanceRepository(base)
@@ -89,8 +106,8 @@ func New(cfg Config, db *data.DB, sessions *security.SessionStore) (*Module, err
 	addressRepository := internalrepo.NewAddressMappingRepository(base)
 
 	webhookManager, err := webhooksvc.NewManager(db, webhooksvc.ManagerConfig{
-		GlobalURL: cfg.Webhooks.GlobalURL, GlobalEnabled: cfg.Webhooks.GlobalEnabled,
-		SigningSecret: cfg.Webhooks.SigningSecret, Retention: cfg.Webhooks.Retention,
+		GlobalURL: appCfg.Webhooks.GlobalURL, GlobalEnabled: appCfg.Webhooks.GlobalEnabled,
+		SigningSecret: appCfg.Webhooks.SigningSecret, Retention: appCfg.Webhooks.Retention,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("whatsapp: build webhook manager: %w", err)
@@ -104,33 +121,33 @@ func New(cfg Config, db *data.DB, sessions *security.SessionStore) (*Module, err
 	hub := internalwhatsapp.NewClientHub()
 	lock := internalwhatsapp.NewPostgresInstanceConnectionLock(instances)
 	events := internalwhatsapp.NewEventPersistenceService(internalwhatsapp.EventPersistenceConfig{
-		SaveDataNewMessage:    cfg.Persistence.Messages,
-		SaveMessageUpdate:     cfg.Persistence.MessageUpdates,
-		SaveDataContacts:      cfg.Persistence.Contacts,
-		ProfilePictureTimeout: cfg.WhatsApp.ProfilePictureTimeout,
+		SaveDataNewMessage:    appCfg.Persistence.Messages,
+		SaveMessageUpdate:     appCfg.Persistence.MessageUpdates,
+		SaveDataContacts:      appCfg.Persistence.Contacts,
+		ProfilePictureTimeout: appCfg.WhatsApp.ProfilePictureTimeout,
 	}, messages, messageUpdates, contacts)
 	events.SetWebhookDispatcher(instances, webhookManager)
 	connections, err := internalwhatsapp.NewService(
-		cfg.internalWhatsApp(), instances, clientFactory, hub, lock, events, webhookManager, logger,
+		internalWhatsAppConfig(appCfg), instances, clientFactory, hub, lock, events, webhookManager, logger,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("whatsapp: build connection service: %w", err)
 	}
 
-	resolver := address.NewResolver(addressRepository, cfg.WhatsApp.AddressCacheTTL)
+	resolver := address.NewResolver(addressRepository, appCfg.WhatsApp.AddressCacheTTL)
 	messageService := message.NewService(instances, messages, connections, resolver, webhookManager)
 	messageService.ConfigureMedia(message.AudioConfig{
-		MaxInputBytes: cfg.Media.MaxInputBytes, MaxDurationSeconds: cfg.Media.MaxDurationSeconds,
-		ProcessingTimeout: cfg.Media.ProcessingTimeout, FFmpegPath: cfg.Media.FFmpegPath,
-		FFprobePath: cfg.Media.FFprobePath, TempDir: cfg.Media.TempDir,
+		MaxInputBytes: appCfg.Media.MaxInputBytes, MaxDurationSeconds: appCfg.Media.MaxDurationSeconds,
+		ProcessingTimeout: appCfg.Media.ProcessingTimeout, FFmpegPath: appCfg.Media.FFmpegPath,
+		FFprobePath: appCfg.Media.FFprobePath, TempDir: appCfg.Media.TempDir,
 	}, message.ThumbnailConfig{
-		MaxInputBytes: cfg.Media.MaxInputBytes, Timeout: cfg.Media.ProcessingTimeout,
-		FFmpegPath: cfg.Media.FFmpegPath, TempDir: cfg.Media.TempDir,
+		MaxInputBytes: appCfg.Media.MaxInputBytes, Timeout: appCfg.Media.ProcessingTimeout,
+		FFmpegPath: appCfg.Media.FFmpegPath, TempDir: appCfg.Media.TempDir,
 	})
 	processor, err := message.NewMessageProcessingManager(db, messageService, message.ProcessingConfig{
-		ProcessingTimeout: cfg.Processing.ProcessingTimeout,
-		GroupInfoTimeout:  cfg.Processing.GroupInfoTimeout, SendTimeout: cfg.Processing.SendTimeout,
-		Retention: cfg.Processing.Retention,
+		ProcessingTimeout: appCfg.Processing.ProcessingTimeout,
+		GroupInfoTimeout:  appCfg.Processing.GroupInfoTimeout, SendTimeout: appCfg.Processing.SendTimeout,
+		Retention: appCfg.Processing.Retention,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("whatsapp: build message processor: %w", err)
@@ -138,14 +155,19 @@ func New(cfg Config, db *data.DB, sessions *security.SessionStore) (*Module, err
 	messageService.SetProcessor(processor)
 	chatService := chat.NewService(instances, messages, connections, resolver)
 	groupService := group.NewService(instances, connections)
-	webhookService := webhooksvc.NewService(instances, webhookRepository, cfg.Webhooks.SigningSecret != "")
-	publicRepository := newInstanceRepository(instances)
-	policy := NewInstancePolicy(cfg.Policy)
+	webhookService := webhooksvc.NewService(instances, webhookRepository, appCfg.Webhooks.SigningSecret != "")
+	publicRepository := repositories.NewInstanceRepositoryFromInternal(instances)
+	policy := policies.NewInstancePolicy(appCfg.Policy)
+	service := services.NewService(appCfg.Tenant, publicRepository, policy, connections,
+		messageService, chatService, groupService, webhookService)
+	controller := controllers.NewWhatsAppController(appCfg, service, sessions)
+	publicService := wrapService(service)
 
 	return &Module{
-		cfg: cfg, db: db, sessions: sessions, logger: logger,
-		service: newService(cfg.Tenant, publicRepository, instances, policy, connections,
-			messageService, chatService, groupService, webhookService),
+		cfg: cfg, db: db, sessions: sessions, logger: logger, docs: docs,
+		service:          service,
+		publicService:    publicService,
+		controller:       controller,
 		webhookManager:   webhookManager,
 		messageProcessor: processor, connections: connections,
 		whatsMeowUpgrader: clientFactory.Store(),
@@ -157,7 +179,7 @@ func (*Module) Name() string { return "whatsapp" }
 
 // Service exposes the authorized domain API for explicit composition by the
 // host application.
-func (m *Module) Service() *Service { return m.service }
+func (m *Module) Service() *Service { return m.publicService }
 
 // RegisterJobHandlers registers every durable module job with the host
 // application's native queue worker.
@@ -166,9 +188,9 @@ func (m *Module) RegisterJobHandlers(worker *queue.Worker) error {
 		return errors.New("whatsapp: RegisterJobHandlers needs a worker")
 	}
 	for _, name := range []string{
-		webhooksvc.WebhookDeliveryJobName,
-		message.MessageProcessingJobName,
-		message.MessageProcessingCleanupJobName,
+		appjobs.WebhookDeliveryJobName,
+		appjobs.MessageProcessingJobName,
+		appjobs.MessageProcessingCleanupJobName,
 	} {
 		if _, exists := worker.Handler(name); exists {
 			return fmt.Errorf("whatsapp: job handler %q is already registered", name)
@@ -308,19 +330,28 @@ func (m *Module) Close(ctx context.Context) error {
 // WhatsMeow store schema to its upstream container. They are never applied by
 // New, Boot or Start.
 func (m *Module) Migrations() []foundation.Migration {
-	return whatsappMigrations(m.whatsMeowUpgrader)
+	return packagemigrations.Migrations(m.whatsMeowUpgrader)
 }
 
-// subject obtains identity exclusively from the Arandu SessionStore. A failed
-// lookup becomes a guest in the module's configured tenant.
-func (m *Module) subject(r *stdhttp.Request) security.Subject {
-	subject, err := m.sessions.Load(r.Context(), r)
-	if err != nil || subject.ID == "" {
-		return security.Guest(m.cfg.Tenant)
+// Routes registers the module's canonical named HTTP surface.
+func (m *Module) Routes(r *fhttp.Router) {
+	deps := packageroutes.Deps{Prefix: m.cfg.Prefix, Controller: m.controller}
+	if m.docs == nil {
+		packageroutes.Web(r, deps)
+		return
 	}
-	return subject
+	packageroutes.WebDocumented(r, deps, m.docs)
 }
 
-// Routes and the HTTP handlers are kept in routes.go and handlers_*.go so the
-// lifecycle remains auditable in one place.
-func (m *Module) Routes(r *fhttp.Router) { m.registerRoutes(r) }
+func internalWhatsAppConfig(cfg appconfig.Config) internalconfig.WhatsAppConfig {
+	return internalconfig.WhatsAppConfig{
+		QRCodeLimit: cfg.WhatsApp.QRCodeLimit, QRCodeExpirationTime: cfg.WhatsApp.QRCodeExpiration,
+		QRCodeLightColor: cfg.WhatsApp.QRCodeLightColor, QRCodeDarkColor: cfg.WhatsApp.QRCodeDarkColor,
+		SessionPhoneClient: cfg.WhatsApp.SessionPhoneClient, SessionPhoneName: cfg.WhatsApp.SessionPhoneName,
+		PairingTimeout: cfg.WhatsApp.PairingTimeout, AutoReconnect: cfg.WhatsApp.AutoReconnect,
+		StartupReconnectConcurrency: cfg.WhatsApp.StartupReconnectConcurrency,
+		ConnectTimeout:              cfg.WhatsApp.ConnectTimeout, ReconnectInitialDelay: cfg.WhatsApp.ReconnectInitialDelay,
+		ReconnectMaxDelay: cfg.WhatsApp.ReconnectMaxDelay, ProfilePictureTimeout: cfg.WhatsApp.ProfilePictureTimeout,
+		AddressCacheTTL: cfg.WhatsApp.AddressCacheTTL,
+	}
+}

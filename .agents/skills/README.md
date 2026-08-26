@@ -15,10 +15,10 @@ names the situation you are in rather than the topic it covers.
 
 | skill | when it fires |
 | --- | --- |
-| `whatsapp-policy` | opening an action, adding a repository method, or anything answering 403 |
-| `whatsapp-module` | adding a route, a handler, a config field, a response field or a migration |
-| `whatsapp-release` | the gates, the manifest, a dependency, a version, a tag |
-| `whatsapp-package` | installing and wiring this package **into an application** |
+| `whatsapp-policy` | opening an action, adding a repository method, anything answering 403, or deciding access to Swagger UI/spec |
+| `whatsapp-module` | adding a route, OpenAPI operation, handler, config field, response field or migration |
+| `whatsapp-release` | the gates, manifest, Swagger dependency publication, a version or a tag |
+| `whatsapp-package` | installing, wiring and optionally documenting this package **inside an application** |
 
 The last one has a different audience from the other three: it travels with the
 package so an assistant installing it has the explicit wiring, `aru migrate`,

@@ -13,6 +13,8 @@ import (
 	"github.com/arandu-io/hesape/database/migrations"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	_ "modernc.org/sqlite"
+
+	packagemigrations "github.com/hyz-is/arandu-whatsapp/database/migrations"
 )
 
 const migrationConnectionName = "default"
@@ -30,7 +32,7 @@ func TestMigrationsRunThroughHesapeMigratorAndRollbackOwnedSchema(t *testing.T) 
 
 	ctx := context.Background()
 	container := sqlstore.NewWithDB(db, "sqlite3", nil)
-	declared := whatsappMigrations(container)
+	declared := packagemigrations.Migrations(container)
 	wantNames := []string{
 		"20260825_0001_create_whatsapp_tables",
 		"20260825_0002_upgrade_whatsmeow_store",
@@ -199,14 +201,14 @@ func TestWhatsMeowMigrationDelegatesAndPropagatesErrors(t *testing.T) {
 		called++
 		return boom
 	})
-	migration := whatsappMigrations(upgrader)[1]
+	migration := packagemigrations.Migrations(upgrader)[1]
 	if err := migration.Up(context.Background(), nil); !errors.Is(err, boom) {
 		t.Fatalf("Up error = %v, want wrapped boom", err)
 	}
 	if called != 1 {
 		t.Fatalf("upgrader called %d times, want 1", called)
 	}
-	if err := whatsappMigrations(nil)[1].Up(context.Background(), nil); err == nil {
+	if err := packagemigrations.Migrations(nil)[1].Up(context.Background(), nil); err == nil {
 		t.Fatal("migration accepted a missing WhatsMeow schema upgrader")
 	}
 }
@@ -226,7 +228,7 @@ func TestWhatsMeowMigrationDoesNotUpgradeDuringPretend(t *testing.T) {
 		t.Fatal("Hesape migration connection does not support pretend mode")
 	}
 	called := 0
-	migration := whatsappMigrations(schemaUpgraderFunc(func(context.Context) error {
+	migration := packagemigrations.Migrations(schemaUpgraderFunc(func(context.Context) error {
 		called++
 		return nil
 	}))[1]

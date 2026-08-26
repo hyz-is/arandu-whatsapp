@@ -5,7 +5,6 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -15,29 +14,30 @@ import (
 	"github.com/arandu-io/hesape/database"
 
 	"github.com/hyz-is/arandu-whatsapp/internal/database/types"
+	"github.com/hyz-is/arandu-whatsapp/internal/domain"
 )
 
 var (
-	ErrInstanceNotFound            = errors.New("instance not found")
-	ErrInstanceNameAlreadyExists   = errors.New("instance name already exists")
-	ErrInstanceHasDependencies     = errors.New("instance has dependencies")
-	ErrWhatsAppDeviceAlreadyLinked = errors.New("whatsapp device already linked")
-	ErrWebhookAlreadyExists        = errors.New("webhook already exists")
-	ErrMessageNotFound             = errors.New("message not found")
-	ErrInvalidWebhookEvent         = errors.New("invalid webhook event")
-	ErrInvalidWebhookURL           = errors.New("invalid webhook url")
-	ErrInvalidJSON                 = errors.New("invalid json")
-	ErrInvalidEnum                 = errors.New("invalid enum")
-	ErrInvalidInput                = errors.New("invalid input")
-	ErrInvalidCursor               = errors.New("invalid cursor")
-	ErrWebhookNotFound             = errors.New("webhook not found")
+	ErrInstanceNotFound            = domain.ErrInstanceNotFound
+	ErrInstanceNameAlreadyExists   = domain.ErrInstanceNameAlreadyExists
+	ErrInstanceHasDependencies     = domain.ErrInstanceHasDependencies
+	ErrWhatsAppDeviceAlreadyLinked = domain.ErrWhatsAppDeviceAlreadyLinked
+	ErrWebhookAlreadyExists        = domain.ErrWebhookAlreadyExists
+	ErrMessageNotFound             = domain.ErrMessageNotFound
+	ErrInvalidWebhookEvent         = domain.ErrInvalidWebhookEvent
+	ErrInvalidWebhookURL           = domain.ErrInvalidWebhookURL
+	ErrInvalidJSON                 = domain.ErrInvalidJSON
+	ErrInvalidEnum                 = domain.ErrInvalidEnum
+	ErrInvalidInput                = domain.ErrInvalidInput
+	ErrInvalidCursor               = domain.ErrInvalidCursor
+	ErrWebhookNotFound             = domain.ErrWebhookNotFound
 )
 
 const (
 	// DefaultInstancePageLimit is the page size used when a caller omits one.
-	DefaultInstancePageLimit = 200
+	DefaultInstancePageLimit = domain.DefaultInstancePageLimit
 	// MaxInstancePageLimit caps every public instance query.
-	MaxInstancePageLimit = 200
+	MaxInstancePageLimit = domain.MaxInstancePageLimit
 )
 
 // Base contains the shared application database. Authorization is deliberately
@@ -139,6 +139,7 @@ type WebhookRepository interface {
 	UpsertEvents(ctx context.Context, grant security.Grant, webhookID int64, events map[string]bool) (types.Webhook, error)
 }
 
+// InstanceDependenciesError reports the owned record counts that blocked deletion.
 type InstanceDependenciesError struct {
 	InstanceID int64
 	Messages   int64
@@ -147,9 +148,27 @@ type InstanceDependenciesError struct {
 	Webhooks   int64
 }
 
+// Error describes the instance and its owned records.
 func (e *InstanceDependenciesError) Error() string {
 	return fmt.Sprintf("%v: instance %d has %d messages, %d chats, %d contacts and %d webhooks",
 		ErrInstanceHasDependencies, e.InstanceID, e.Messages, e.Chats, e.Contacts, e.Webhooks)
 }
 
-func (e *InstanceDependenciesError) Unwrap() error { return ErrInstanceHasDependencies }
+// Unwrap returns the shared domain sentinel.
+func (e *InstanceDependenciesError) Unwrap() error { return domain.ErrInstanceHasDependencies }
+
+// As preserves compatibility with the domain model used across application layers.
+func (e *InstanceDependenciesError) As(target any) bool {
+	destination, ok := target.(**domain.InstanceDependenciesError)
+	if !ok {
+		return false
+	}
+	*destination = &domain.InstanceDependenciesError{
+		InstanceID: e.InstanceID,
+		Messages:   e.Messages,
+		Chats:      e.Chats,
+		Contacts:   e.Contacts,
+		Webhooks:   e.Webhooks,
+	}
+	return true
+}

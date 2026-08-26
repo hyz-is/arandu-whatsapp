@@ -1,4 +1,4 @@
-package whatsapp
+package controllers
 
 import (
 	"errors"

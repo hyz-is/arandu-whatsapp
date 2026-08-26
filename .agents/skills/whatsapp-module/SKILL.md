@@ -1,6 +1,6 @@
 ---
 name: whatsapp-module
-description: Change what this Arandu package registers — its routes, handlers, configuration, response shape or schema. Use when the request is to "add a route", "add an endpoint", "add a handler", "add a config option", "change the prefix", "add a field to the response", "add a column", "write a migration", "return the tenant id too", "add a background job to the package", "make it run something at boot", or when a change touches module.go, config.go or model.go. Covers foundation.Module and the five optional interfaces beside it, why handlers are thin, the migration name that carries the order, and what Resource is for.
+description: Change what this Arandu package registers — its routes, controllers, OpenAPI contract, configuration, response shape or schema. Use when the request is to "add a route", "add an endpoint", "add a handler", "document a route", "change Swagger", "add a config option", "change the prefix", "add a field to the response", "add a column", "write a migration", "return the tenant id too", "add a background job to the package", "make it run something at boot", or when a change touches module.go, config/, app/Http or app/Models. Covers foundation.Module and the five optional interfaces beside it, why controllers are thin, the migration name that carries the order, what Resource is for and how routes feed Arandu Swagger.
 license: MIT
 ---
 
@@ -54,21 +54,30 @@ application that installs this package fails `aru doctor` with
 
 ## Adding a route
 
-**1. Register it in `registerRoutes`, with a name.**
+**1. Register it in `routes/web.go`, with a name.**
 
 ```go
-	register(stdhttp.MethodDelete, prefix+"/{instance}/resource/{id}", "resource.destroy", m.destroy)
+	register(stdhttp.MethodDelete, prefix+"/{instance}/resource/{id}", "resource.destroy", deps.Controller.Destroy)
 ```
 
 The helper adds the stable `whatsapp.` name prefix. Paths derive from
 `m.cfg.Prefix`; `TestCustomPrefixAppliesToEveryRoute` fails if one escapes it.
 
-**2. Write the handler thin.** Read the input, ask the service, answer:
+**2. Complete its native documentation definition.** Add the named operation
+to `app/Http/Documentation/OperationDefinitions.go` and register new reusable
+components beside it when necessary. Do not repeat method, path or
+`operationId`: `routes/web.go` passes the real named route to Arandu Swagger,
+which derives those three values from runtime metadata. All module-owned
+component names start with `WhatsApp`.
+The generated OpenAPI document is the only contract artifact; do not recreate a
+static YAML source beside it.
+
+**3. Write the controller method thin.** Read the input, ask the service, answer:
 
 ```go
-func (m *Module) destroy(ctx *fhttp.Context) error {
-	if _, err := m.service.DeleteInstance(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), false); err != nil {
-		return m.answer(ctx, err)
+func (c *WhatsAppController) Destroy(ctx *fhttp.Context) error {
+	if _, err := c.service.DeleteInstance(ctx.Ctx(), c.Subject(ctx.Request), ctx.Param("instance"), false); err != nil {
+		return c.answer(ctx, err)
 	}
 	return ctx.Status(stdhttp.StatusNoContent)
 }
@@ -78,25 +87,28 @@ func (m *Module) destroy(ctx *fhttp.Context) error {
 what it is handed, so a nil resource panics inside the framework rather than
 answering 204.
 
-No rule and no statement lives in a handler. A handler that reached the
-repository would be a handler that skipped the policy — read `whatsapp-policy`
+No rule and no statement lives in a controller. A controller that reached the
+repository would be a controller that skipped the policy — read `whatsapp-policy`
 before writing the service method it calls.
 
-**3. Let `answer` translate known domain refusals.** `statusForError` is the
+**4. Let `answer` translate known domain refusals.** `statusForError` is the
 single mapping for policy, validation, not-found, conflict, payload/media and
 WhatsApp availability errors. Policy details are reduced to a generic 403;
 known client errors keep safe domain messages, and 5xx responses use only the
 HTTP status text. Unknown errors are *returned*, not swallowed, so the
 framework owns the 500 response and logging.
 
-**4. Add the case to both route-surface tests.**
+**5. Add the case to the route and documentation surface tests.**
 `TestModuleRegistersCanonicalRouteSurface` asserts the exact method/path/name
-set, and the full guest-refusal test exercises all 36 routes and expects 403
-before persistence. Both live in `tests/Feature/routes_test.go`.
+set, and the full guest-refusal test exercises all routes and expects 403
+before persistence. `TestSwaggerDocumentationMatchesPublicRouteSurface`
+requires a one-to-one match between runtime routes and the generated OpenAPI
+operations. They live in `tests/Feature`.
 
 ## Where the subject comes from
 
-`m.subject(r)` loads the session and returns `security.Guest(m.cfg.Tenant)` when
+`WhatsAppController.Subject(r)` loads the session and returns
+`security.Guest(c.cfg.Tenant)` when
 there is none. The service then requires every authenticated subject to match
 the configured runtime tenant. Nothing reads identity or tenant from request
 fields.
@@ -108,7 +120,7 @@ request.
 
 ## Adding a configuration field
 
-`Config` is a typed struct, and that is the point: a misspelled key in a map is
+`Config` in `config/whatsapp.go` is a typed struct, and that is the point: a misspelled key in a map is
 a setting that silently keeps its default, and here a field that does not exist
 does not compile.
 
@@ -119,8 +131,8 @@ Three things move together for every new field.
 - **A rule in `Validate`** if there is a value it cannot be. `New` calls
   `Validate` before anything else, so a setting that cannot work fails where it
   is wired rather than on the first request that needed it.
-- **A default in `withDefaults`**, beside the related configuration, if zero is
-  meant to mean something. `withDefaults` runs
+- **A default in `config.WithDefaults`**, beside the related configuration, if zero is
+  meant to mean something. `WithDefaults` runs
   *after* `Validate` and never before: filling a default in first hides the
   value somebody actually wrote from the check that would have refused it.
 
@@ -133,14 +145,14 @@ if the field can make `New` fail.
 
 ## What may leave in a response
 
-`Resource` and `Collection` in `model.go` are declared lists of fields, not the
+`Resource` and `Collection` in `app/Http/Resources` are declared lists of fields, not the
 entity. An encoder handed the entity answers with whatever fields it happens to
 have, including the ones somebody adds later without ever opening the handler —
 and `TenantID` is exactly such a field. It names another customer's identifier
 and belongs in no response.
 
 So a new column that should be visible is added in two places: the struct in
-`model.go`, and the map `ToArray` returns. A column that should not be visible
+`app/Models`, and the map `ToArray` returns. A column that should not be visible
 is added in one.
 
 `With()` is what goes beside the fields at the top level. `ctx.JSON` puts what
@@ -149,8 +161,9 @@ errors; they may not answer 200 with `{}` after a failed marshal.
 
 ## Adding a migration
 
-Append it to the slice `Migrations()` returns, and give it a name that sorts
-after the last one:
+Add one type in its own `database/migrations` file, append it to the slice
+`database/migrations.Migrations()` returns, and give it a name that sorts after
+the last one:
 
 ```go
 func (addWhatsappFeature) GetName() string { return "20260825_0003_add_whatsapp_feature" }

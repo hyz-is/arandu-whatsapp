@@ -1,6 +1,6 @@
 ---
 name: whatsapp-policy
-description: Change or configure authorization in the Arandu WhatsApp module. Use for role mappings, 403 responses, new actions, Grant-first repository methods, tenant isolation or service authorization. Covers Config.Policy.Roles, default-deny behavior, Grant.Check, record checks and the fixed runtime tenant boundary.
+description: Change or configure authorization in the Arandu WhatsApp module. Use for role mappings, 403 responses, new actions, Grant-first repository methods, tenant isolation, service authorization or access to Swagger UI/spec routes. Covers Config.Policy.Roles, default-deny behavior, Grant.Check, record checks, the fixed runtime tenant boundary and the host-owned documentation middleware boundary.
 license: MIT
 ---
 
@@ -14,7 +14,7 @@ and actions absent from the map remain closed.
 
 Four things happen, in this order, and each one is a different file.
 
-1. `service.go` verifies that the subject belongs to `Config.Tenant`.
+1. `app/Services/WhatsAppService.go` verifies that the subject belongs to `Config.Tenant`.
 2. It validates input and calls `security.Authorize` for the operation.
 3. `InstancePolicy.Can` checks record tenant and configured roles.
 4. Only then does a `security.Grant` exist, and repositories will not run a
@@ -41,6 +41,12 @@ must never appear in an HTTP handler or accept a tenant from a request.
 
 Do not build this map by iterating `whatsapp.Actions`; that would silently open
 new capabilities after an upgrade.
+
+Swagger UI and specification access are a separate host-application surface.
+Do not add a WhatsApp action, policy branch or Grant for `/docs`: protect the
+configured Swagger `UIPath` and `SpecPath` with the application's
+`UIMiddleware` and `SpecMiddleware`. WhatsApp policies and Grants continue to
+authorize the 36 API operations described by that document.
 
 **2. Guests remain denied unless a configured role can actually match.** `security.Guest(tenant)` is the
 subject a visitor with no readable session gets, and it is the only subject that
@@ -94,7 +100,7 @@ name a record without first holding a decision about it, and cannot leave the
 decision out, because the call does not compile without it.
 
 `data.Repository[T, ID]` requires all five methods — `Find`, `List`, `Create`,
-`Update`, `Delete` — so the compile-time assertion in `repository.go` fails if
+`Update`, `Delete` — so the compile-time assertion in `app/Repositories` fails if
 one is dropped, even one the package has no route for. Keep the method and its
 `g.Check`; a repository with a hole in it is not a smaller repository.
 
@@ -136,12 +142,12 @@ beside the tenant filter. The action decides whether the listing runs at all.
   `tenant-from-request` and `tenant-from-header`. The one place a tenant does
   not come from a Grant is validated `Config.Tenant`, used for the guest and the
   module-owned runtime scope.
-- **A check in the handler.** `handlers_*.go` handlers read the input, ask the
-  service and answer. A handler that reached the repository would be a handler
+- **A check in the controller.** `app/Http/Controllers` reads the input, asks the
+  service and answers. A controller that reached the repository would be a controller
   that skipped the policy, and nothing in the type system would object — the
   Grant is what objects, and only if it is absent.
 - **A refusal that explains itself to the client.** `answer` in
-  `handler_support.go` sends a generic 403. Telling the client why a policy said no is
+  `app/Http/Controllers/Controller.go` sends a generic 403. Telling the client why a policy said no is
   telling them what exists and what does not, one request at a time. The reason
   is in the log, where the person operating the system reads it and the person
   probing it does not.

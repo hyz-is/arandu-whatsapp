@@ -1,4 +1,4 @@
-package whatsapp
+package controllers
 
 import (
 	"errors"
@@ -8,73 +8,83 @@ import (
 
 	fhttp "github.com/arandu-io/framework/http"
 
+	requests "github.com/hyz-is/arandu-whatsapp/app/Http/Requests"
+	models "github.com/hyz-is/arandu-whatsapp/app/Models"
 	"github.com/hyz-is/arandu-whatsapp/internal/message"
 )
 
-func (m *Module) sendText(ctx *fhttp.Context) error {
-	var input message.SendTextRequest
+// SendText sends a text message through an instance.
+func (m *WhatsAppController) SendText(ctx *fhttp.Context) error {
+	var input requests.SendText
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendText(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendText(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendLink(ctx *fhttp.Context) error {
-	var input message.SendLinkRequest
+// SendLink sends a link message through an instance.
+func (m *WhatsAppController) SendLink(ctx *fhttp.Context) error {
+	var input requests.SendLink
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendLink(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendLink(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendMedia(ctx *fhttp.Context) error {
-	var input message.SendMediaRequest
+// SendMedia sends structured media through an instance.
+func (m *WhatsAppController) SendMedia(ctx *fhttp.Context) error {
+	var input requests.SendMedia
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendMedia(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendMedia(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendAudio(ctx *fhttp.Context) error {
-	var input message.SendWhatsAppAudioRequest
+// SendAudio sends structured audio through an instance.
+func (m *WhatsAppController) SendAudio(ctx *fhttp.Context) error {
+	var input requests.SendWhatsAppAudio
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendAudio(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendAudio(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendContact(ctx *fhttp.Context) error {
-	var input message.SendContactRequest
+// SendContact sends a contact card through an instance.
+func (m *WhatsAppController) SendContact(ctx *fhttp.Context) error {
+	var input requests.SendContact
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendContact(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendContact(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendLocation(ctx *fhttp.Context) error {
-	var input message.SendLocationRequest
+// SendLocation sends geographic coordinates through an instance.
+func (m *WhatsAppController) SendLocation(ctx *fhttp.Context) error {
+	var input requests.SendLocation
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendLocation(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendLocation(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendReaction(ctx *fhttp.Context) error {
-	var input message.SendReactionRequest
+// SendReaction sends a reaction to an existing message.
+func (m *WhatsAppController) SendReaction(ctx *fhttp.Context) error {
+	var input requests.SendReaction
 	if err := m.decodeJSON(ctx, &input, false, false); err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendReaction(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"), input)
+	result, err := m.service.SendReaction(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"), input)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendMediaFile(ctx *fhttp.Context) error {
+// SendMediaFile sends a multipart media upload through an instance.
+func (m *WhatsAppController) SendMediaFile(ctx *fhttp.Context) error {
 	header, file, err := m.multipartAttachment(ctx)
 	if err != nil {
 		return m.answer(ctx, err)
@@ -89,13 +99,14 @@ func (m *Module) sendMediaFile(ctx *fhttp.Context) error {
 	if err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendMediaFile(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"),
+	result, err := m.service.SendMediaFile(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"),
 		ctx.Request.FormValue("number"), file, header, ctx.Request.FormValue("mediaType"),
 		optionalString(ctx.Request.FormValue("caption")), options)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) sendAudioFile(ctx *fhttp.Context) error {
+// SendAudioFile sends a multipart audio upload through an instance.
+func (m *WhatsAppController) SendAudioFile(ctx *fhttp.Context) error {
 	header, file, err := m.multipartAttachment(ctx)
 	if err != nil {
 		return m.answer(ctx, err)
@@ -110,12 +121,12 @@ func (m *Module) sendAudioFile(ctx *fhttp.Context) error {
 	if err != nil {
 		return m.answer(ctx, err)
 	}
-	result, err := m.service.SendAudioFile(ctx.Ctx(), m.subject(ctx.Request), ctx.Param("instance"),
+	result, err := m.service.SendAudioFile(ctx.Ctx(), m.Subject(ctx.Request), ctx.Param("instance"),
 		ctx.Request.FormValue("number"), file, header, options)
 	return m.answerMessageResult(ctx, result, err)
 }
 
-func (m *Module) multipartAttachment(ctx *fhttp.Context) (*multipart.FileHeader, multipart.File, error) {
+func (m *WhatsAppController) multipartAttachment(ctx *fhttp.Context) (*multipart.FileHeader, multipart.File, error) {
 	limit := m.cfg.Media.MaxInputBytes + 1024*1024
 	ctx.Request.Body = stdhttp.MaxBytesReader(ctx.Response, ctx.Request.Body, limit)
 	if err := ctx.Request.ParseMultipartForm(32 << 20); err != nil {
@@ -156,7 +167,7 @@ func removeMultipartFiles(request *stdhttp.Request) {
 	}
 }
 
-func (m *Module) answerMessageResult(ctx *fhttp.Context, result message.SendResult, err error) error {
+func (m *WhatsAppController) answerMessageResult(ctx *fhttp.Context, result models.SendResult, err error) error {
 	if err != nil {
 		return m.answer(ctx, err)
 	}

@@ -1,52 +1,20 @@
-package whatsapp
+package migrations
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/arandu-io/framework/foundation"
-	"github.com/arandu-io/hesape/database/migrations"
+	hesapemigrations "github.com/arandu-io/hesape/database/migrations"
 )
 
-// whatsMeowSchemaUpgrader is the narrow upstream schema contract used by the
-// migration. The sqlstore container built by New satisfies it directly.
-type whatsMeowSchemaUpgrader interface {
-	Upgrade(context.Context) error
-}
-
-// whatsappMigrations is intentionally explicit. The package owns the
-// tenant-scoped whatsapp_* tables; WhatsMeow remains the owner of its own store
-// schema and upgrades it through the container supplied here.
-func whatsappMigrations(upgrader whatsMeowSchemaUpgrader) []foundation.Migration {
-	return []foundation.Migration{
-		createWhatsAppTables{},
-		upgradeWhatsMeowStore{
-			BaseMigration: migrations.BaseMigration{OutsideTransaction: true},
-			upgrader:      upgrader,
-		},
-		createWebhookDeliveries{},
-		createMessageJobs{},
-	}
-}
-
-func statements(ctx context.Context, conn migrations.Connection, queries ...string) error {
-	for _, query := range queries {
-		if _, err := conn.Statement(ctx, query, nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // createWhatsAppTables creates the final tenant-scoped domain schema.
-type createWhatsAppTables struct{ migrations.BaseMigration }
+type createWhatsAppTables struct{ hesapemigrations.BaseMigration }
 
 func (createWhatsAppTables) GetName() string {
 	return "20260825_0001_create_whatsapp_tables"
 }
 
-func (createWhatsAppTables) Up(ctx context.Context, conn migrations.Connection) error {
+func (createWhatsAppTables) Up(ctx context.Context, conn hesapemigrations.Connection) error {
 	return statements(ctx, conn,
 		`CREATE TABLE whatsapp_instances (
     id                       BIGINT NOT NULL PRIMARY KEY,
@@ -209,7 +177,7 @@ func (createWhatsAppTables) Up(ctx context.Context, conn migrations.Connection) 
 	)
 }
 
-func (createWhatsAppTables) Down(ctx context.Context, conn migrations.Connection) error {
+func (createWhatsAppTables) Down(ctx context.Context, conn hesapemigrations.Connection) error {
 	return statements(ctx, conn,
 		`DROP TABLE whatsapp_address_mappings`,
 		`DROP TABLE whatsapp_instance_connections`,
@@ -222,130 +190,7 @@ func (createWhatsAppTables) Down(ctx context.Context, conn migrations.Connection
 	)
 }
 
-// upgradeWhatsMeowStore delegates schema ownership to WhatsMeow. The upstream
-// upgrader manages its own transactions, so Arandu must not wrap this migration
-// in another one.
-type upgradeWhatsMeowStore struct {
-	migrations.BaseMigration
-	upgrader whatsMeowSchemaUpgrader
-}
-
-func (upgradeWhatsMeowStore) GetName() string {
-	return "20260825_0002_upgrade_whatsmeow_store"
-}
-
-func (m upgradeWhatsMeowStore) Up(ctx context.Context, conn migrations.Connection) error {
-	if pretending, ok := conn.(interface{ Pretending() bool }); ok && pretending.Pretending() {
-		return nil
-	}
-	if m.upgrader == nil {
-		return errors.New("whatsapp: WhatsMeow schema upgrader is unavailable")
-	}
-	if err := m.upgrader.Upgrade(ctx); err != nil {
-		return fmt.Errorf("whatsapp: upgrade WhatsMeow store schema: %w", err)
-	}
-	return nil
-}
-
-// createWebhookDeliveries creates the durable snapshot owned by this package.
-// The native Hesape queue owns its jobs table and migrations separately.
-type createWebhookDeliveries struct{ migrations.BaseMigration }
-
-func (createWebhookDeliveries) GetName() string {
-	return "20260825_0003_create_webhook_deliveries"
-}
-
-func (createWebhookDeliveries) Up(ctx context.Context, conn migrations.Connection) error {
-	return statements(ctx, conn,
-		`CREATE TABLE whatsapp_webhook_deliveries (
-    id                       VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id                VARCHAR(255) NOT NULL,
-    instance_id              BIGINT NOT NULL,
-    event                    VARCHAR(100) NOT NULL,
-    target                   VARCHAR(32) NOT NULL,
-    url                      VARCHAR(500) NOT NULL,
-    body                     TEXT NOT NULL,
-    headers                  TEXT NOT NULL,
-    status                   VARCHAR(32) NOT NULL,
-    attempts                 INTEGER NOT NULL,
-    response_status          INTEGER,
-    response_body            TEXT,
-    last_error               TEXT,
-    created_at               TIMESTAMP NOT NULL,
-    updated_at               TIMESTAMP NOT NULL,
-    delivered_at             TIMESTAMP,
-    UNIQUE (tenant_id, id),
-    FOREIGN KEY (tenant_id, instance_id)
-        REFERENCES whatsapp_instances (tenant_id, id) ON DELETE CASCADE
-)`,
-		`CREATE INDEX whatsapp_webhook_deliveries_status_idx
-    ON whatsapp_webhook_deliveries (tenant_id, status, created_at, id)`,
-		`CREATE INDEX whatsapp_webhook_deliveries_instance_idx
-    ON whatsapp_webhook_deliveries (tenant_id, instance_id, created_at, id)`,
-		`CREATE INDEX idx_whatsapp_webhook_deliveries_retention
-    ON whatsapp_webhook_deliveries (tenant_id, created_at, id)`,
-	)
-}
-
-func (createWebhookDeliveries) Down(ctx context.Context, conn migrations.Connection) error {
-	return statements(ctx, conn,
-		`DROP INDEX idx_whatsapp_webhook_deliveries_retention`,
-		`DROP TABLE whatsapp_webhook_deliveries`,
-	)
-}
-
-// createMessageJobs creates the durable mention-all snapshots. The native
-// Hesape queue owns its jobs table and stores only the snapshot process id.
-type createMessageJobs struct{ migrations.BaseMigration }
-
-func (createMessageJobs) GetName() string {
-	return "20260825_0004_create_message_jobs"
-}
-
-func (createMessageJobs) Up(ctx context.Context, conn migrations.Connection) error {
-	return statements(ctx, conn,
-		`CREATE TABLE whatsapp_message_jobs (
-    process_id               VARCHAR(36) NOT NULL PRIMARY KEY,
-    message_job_id           VARCHAR(36) NOT NULL,
-    cleanup_job_id           VARCHAR(36) NOT NULL,
-    tenant_id                VARCHAR(255) NOT NULL,
-    instance_id              BIGINT NOT NULL,
-    instance_name            VARCHAR(255) NOT NULL,
-    remote_jid               VARCHAR(100) NOT NULL,
-    message_id               VARCHAR(100) NOT NULL,
-    message_type             VARCHAR(100) NOT NULL,
-    message_payload          TEXT NOT NULL,
-    content                  TEXT NOT NULL,
-    presence                 VARCHAR(32),
-    delay_ms                 BIGINT NOT NULL,
-    external_attributes      TEXT NOT NULL,
-    webhook_instance         TEXT NOT NULL,
-    created_at               TIMESTAMP NOT NULL,
-    updated_at               TIMESTAMP NOT NULL,
-    UNIQUE (tenant_id, process_id),
-    UNIQUE (tenant_id, instance_id, message_id),
-    UNIQUE (message_job_id),
-    UNIQUE (cleanup_job_id),
-    FOREIGN KEY (tenant_id, instance_id)
-        REFERENCES whatsapp_instances (tenant_id, id) ON DELETE CASCADE
-)`,
-		`CREATE INDEX whatsapp_message_jobs_instance_idx
-    ON whatsapp_message_jobs (tenant_id, instance_id, created_at, process_id)`,
-		`CREATE INDEX whatsapp_message_jobs_retention_idx
-    ON whatsapp_message_jobs (tenant_id, created_at, process_id)`,
-	)
-}
-
-func (createMessageJobs) Down(ctx context.Context, conn migrations.Connection) error {
-	return statements(ctx, conn, `DROP TABLE whatsapp_message_jobs`)
-}
-
 var (
-	_ foundation.Migration           = createWhatsAppTables{}
-	_ foundation.Migration           = upgradeWhatsMeowStore{}
-	_ foundation.Migration           = createWebhookDeliveries{}
-	_ foundation.Migration           = createMessageJobs{}
-	_ migrations.ReversibleMigration = createWhatsAppTables{}
-	_ migrations.ReversibleMigration = createWebhookDeliveries{}
-	_ migrations.ReversibleMigration = createMessageJobs{}
+	_ foundation.Migration                 = createWhatsAppTables{}
+	_ hesapemigrations.ReversibleMigration = createWhatsAppTables{}
 )
