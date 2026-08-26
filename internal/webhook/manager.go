@@ -19,6 +19,7 @@ import (
 
 	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/security"
+	"github.com/arandu-io/hesape/cache"
 	httpclient "github.com/arandu-io/hesape/http/client"
 	hlog "github.com/arandu-io/hesape/log"
 	"github.com/arandu-io/hesape/queue"
@@ -78,6 +79,12 @@ type ManagerConfig struct {
 	SigningSecret string
 	// Retention bounds durable snapshot lifetime. Zero uses the safe default.
 	Retention time.Duration
+	// ConfigurationCache reuses per-instance webhook configuration reads across
+	// dispatches. Nil reads the database on every event.
+	ConfigurationCache *cache.Repository
+	// ConfigurationCacheTTL bounds how long a cached configuration is reused.
+	// Zero uses DefaultConfigurationCacheTTL when a cache is supplied.
+	ConfigurationCacheTTL time.Duration
 	// HTTPClient is a test seam. Production leaves it nil so the Hesape client
 	// factory owns the guarded transport.
 	HTTPClient *http.Client
@@ -97,6 +104,7 @@ type Manager struct {
 	globalEnabled bool
 	signingSecret []byte
 	retention     time.Duration
+	configCache   configurationCache
 	client        *http.Client
 	pruneMu       sync.Mutex
 	lastPrune     map[string]time.Time
@@ -132,6 +140,13 @@ func NewManager(db *data.DB, cfg ManagerConfig) (*Manager, error) {
 	if retention == 0 {
 		retention = DefaultDeliveryRetention
 	}
+	if cfg.ConfigurationCacheTTL < 0 {
+		return nil, errors.New("webhook: configuration cache TTL cannot be negative")
+	}
+	configTTL := cfg.ConfigurationCacheTTL
+	if configTTL == 0 {
+		configTTL = DefaultConfigurationCacheTTL
+	}
 
 	factory := httpclient.NewFactory(cfg.HTTPClient)
 	client := factory.CreatePendingRequest().
@@ -147,6 +162,7 @@ func NewManager(db *data.DB, cfg ManagerConfig) (*Manager, error) {
 		globalEnabled: cfg.GlobalEnabled,
 		signingSecret: secret,
 		retention:     retention,
+		configCache:   newConfigurationCache(cfg.ConfigurationCache, configTTL),
 		client:        client,
 		lastPrune:     make(map[string]time.Time),
 	}, nil
@@ -194,7 +210,10 @@ func (m *Manager) Dispatch(ctx context.Context, grant security.Grant, instance W
 	headers := webhookHeaders(requestID, instance, event)
 
 	var result error
-	configured, err := m.repository.FindConfiguration(ctx, runtimeGrant, instance.ID)
+	configured, err := m.configCache.lookup(ctx, runtimeGrant, instance.ID,
+		func(inner context.Context) (types.Webhook, error) {
+			return m.repository.FindConfiguration(inner, runtimeGrant, instance.ID)
+		})
 	switch {
 	case err == nil && configured.Enabled:
 		events, parseErr := types.ParseWebhookEvents(configured.Events)

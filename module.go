@@ -12,6 +12,7 @@ import (
 	"github.com/arandu-io/framework/foundation"
 	fhttp "github.com/arandu-io/framework/http"
 	"github.com/arandu-io/framework/security"
+	"github.com/arandu-io/hesape/cache"
 	"github.com/arandu-io/hesape/queue"
 	swagger "github.com/hyz-is/arandu-swagger"
 
@@ -105,9 +106,15 @@ func newModule(cfg Config, db *data.DB, sessions *security.SessionStore, docs sw
 	webhookRepository := internalrepo.NewWebhookRepository(base)
 	addressRepository := internalrepo.NewAddressMappingRepository(base)
 
+	// One cache, read by the dispatcher and invalidated by the configuration
+	// service. Two would mean a webhook this process just changed still going
+	// to the address it had.
+	webhookConfigCache := cache.New(cache.NewArrayStore())
 	webhookManager, err := webhooksvc.NewManager(db, webhooksvc.ManagerConfig{
 		GlobalURL: appCfg.Webhooks.GlobalURL, GlobalEnabled: appCfg.Webhooks.GlobalEnabled,
 		SigningSecret: appCfg.Webhooks.SigningSecret, Retention: appCfg.Webhooks.Retention,
+		ConfigurationCache:    webhookConfigCache,
+		ConfigurationCacheTTL: appCfg.Webhooks.ConfigurationCacheTTL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("whatsapp: build webhook manager: %w", err)
@@ -155,7 +162,8 @@ func newModule(cfg Config, db *data.DB, sessions *security.SessionStore, docs sw
 	messageService.SetProcessor(processor)
 	chatService := chat.NewService(instances, messages, connections, resolver)
 	groupService := group.NewService(instances, connections)
-	webhookService := webhooksvc.NewService(instances, webhookRepository, appCfg.Webhooks.SigningSecret != "")
+	webhookService := webhooksvc.NewService(db, instances, webhookRepository,
+		webhookConfigCache, appCfg.Webhooks.ConfigurationCacheTTL, appCfg.Webhooks.SigningSecret != "")
 	publicRepository := repositories.NewInstanceRepositoryFromInternal(instances)
 	policy := policies.NewInstancePolicy(appCfg.Policy)
 	service := services.NewService(appCfg.Tenant, publicRepository, policy, connections,

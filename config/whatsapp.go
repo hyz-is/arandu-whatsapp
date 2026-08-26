@@ -23,6 +23,10 @@ const (
 	// DefaultWebhookRetention is the default lifetime of durable delivery
 	// snapshots, including failed deliveries that could otherwise retain PII.
 	DefaultWebhookRetention = webhooksvc.DefaultDeliveryRetention
+
+	// DefaultWebhookConfigurationCacheTTL is the dispatch-side reuse window
+	// applied when WebhookConfig.ConfigurationCacheTTL is left at zero.
+	DefaultWebhookConfigurationCacheTTL = webhooksvc.DefaultConfigurationCacheTTL
 	// DefaultProcessingRetention is the default lifetime of a recoverable
 	// mention-all snapshot and its native queue jobs.
 	DefaultProcessingRetention = message.DefaultProcessingRetention
@@ -118,6 +122,14 @@ type WebhookConfig struct {
 	// Retention is the maximum lifetime of delivery snapshots. Zero uses
 	// DefaultWebhookRetention.
 	Retention time.Duration
+	// ConfigurationCacheTTL is how long a dispatch reuses a webhook
+	// configuration it already read, instead of reading it again.
+	//
+	// It bounds how long this process may keep dispatching against a
+	// configuration another process changed; a change made through this process
+	// takes effect at once. Zero uses DefaultWebhookConfigurationCacheTTL, and a
+	// negative value is rejected.
+	ConfigurationCacheTTL time.Duration
 	// Workers is retained for source compatibility and is ignored. Configure
 	// worker concurrency with `aru queue:work --workers=N`.
 	//
