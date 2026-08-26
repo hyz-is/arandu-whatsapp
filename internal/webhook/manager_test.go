@@ -388,7 +388,7 @@ func TestNewManagerValidatesItsBoundary(t *testing.T) {
 }
 
 func TestWebhookCannotBeEnabledWithoutASigningSecret(t *testing.T) {
-	service := NewService(nil, nil, false)
+	service := NewService(nil, nil, nil, nil, 0, false)
 	_, err := service.Set(context.Background(), testRuntimeGrant(), "beplus", SetInput{
 		URL: "https://example.com/hook",
 	})
@@ -600,6 +600,11 @@ func (d webhookTestDB) insertInstance(t *testing.T) {
 		VALUES (?, ?, ?, ?, ?, ?, ?)`, 1, "acme", "beplus", "ONLINE", `{}`, now, now); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := d.raw.Exec(`INSERT INTO whatsapp_instance_connections
+		(tenant_id, instance_id, connection_status, connection_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, "acme", 1, "CLOSED", 0, now, now); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (d webhookTestDB) insertWebhook(t *testing.T, webhookURL string, enabled bool, events types.WebhookEvents) {
@@ -682,11 +687,37 @@ var webhookTestSchema = []string{
     id BIGINT NOT NULL PRIMARY KEY,
     tenant_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    description VARCHAR(255),
     status VARCHAR(32) NOT NULL,
+    owner_jid VARCHAR(100),
+    profile_pic_url VARCHAR(500),
     external_attributes TEXT NOT NULL,
+    connection_lock_owner VARCHAR(255),
+    connection_lock_until TIMESTAMP,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
-    UNIQUE (tenant_id, id)
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, name)
+)`,
+	`CREATE TABLE whatsapp_instance_connections (
+    tenant_id BIGINT NOT NULL,
+    instance_id BIGINT NOT NULL,
+    connection_status VARCHAR(64) NOT NULL,
+    whatsapp_device_jid VARCHAR(100),
+    whatsapp_owner_jid VARCHAR(100),
+    whatsapp_phone_number VARCHAR(32),
+    profile_pic_id VARCHAR(255),
+    last_connected_at TIMESTAMP,
+    last_disconnected_at TIMESTAMP,
+    last_connection_attempt_at TIMESTAMP,
+    last_connection_error VARCHAR(255),
+    last_connection_event VARCHAR(100),
+    connection_attempts BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (tenant_id, instance_id),
+    FOREIGN KEY (tenant_id, instance_id)
+        REFERENCES whatsapp_instances (tenant_id, id) ON DELETE CASCADE
 )`,
 	`CREATE TABLE whatsapp_webhooks (
     id BIGINT NOT NULL PRIMARY KEY,

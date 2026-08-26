@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"time"
+
+	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/security"
+	"github.com/arandu-io/hesape/cache"
 	hlog "github.com/arandu-io/hesape/log"
 
 	"github.com/hyz-is/arandu-whatsapp/internal/database/repository"
@@ -26,19 +30,37 @@ type SetInput struct {
 }
 
 type WebhookService struct {
+	db               *data.DB
 	instances        repository.InstanceRepository
 	webhooks         repository.WebhookRepository
+	configCache      configurationCache
 	signingAvailable bool
 }
 
+// NewService builds the webhook configuration service. The database handle is
+// the one Set opens its transaction on, so that the row and the events it was
+// asked for are stored together or not at all.
+//
+// The cache is the one the dispatcher reads configurations from. Passing the
+// same repository here is what makes a configuration written through Set take
+// effect on the next event instead of at the end of the cache window; passing
+// nil is correct for a service that only reads.
 func NewService(
+	db *data.DB,
 	instances repository.InstanceRepository,
 	webhooks repository.WebhookRepository,
+	configCache *cache.Repository,
+	configCacheTTL time.Duration,
 	signingAvailable bool,
 ) *WebhookService {
+	if configCacheTTL == 0 {
+		configCacheTTL = DefaultConfigurationCacheTTL
+	}
 	return &WebhookService{
+		db:               db,
 		instances:        instances,
 		webhooks:         webhooks,
+		configCache:      newConfigurationCache(configCache, configCacheTTL),
 		signingAvailable: signingAvailable,
 	}
 }
@@ -63,36 +85,55 @@ func (s *WebhookService) Set(ctx context.Context, grant security.Grant, instance
 		return types.Webhook{}, fmt.Errorf("%w: webhook signing secret is not configured", repository.ErrInvalidInput)
 	}
 
-	instance, err := s.instances.FindByName(ctx, grant, name)
+	// The row and its events are one configuration. Written apart, a failure
+	// between them leaves a webhook enabled against the events it used to have,
+	// which is a delivery the caller did not ask for. data.Transaction is
+	// reentrant per handle, so the transactions the repositories open inside
+	// join this one instead of standing alone.
+	var output types.Webhook
+	err = s.transaction(ctx, func(txCtx context.Context) error {
+		instance, err := s.instances.FindByName(txCtx, grant, name)
+		if err != nil {
+			return err
+		}
+
+		current, err := s.webhooks.FindByInstanceName(txCtx, grant, name)
+		if err != nil {
+			if !errors.Is(err, repository.ErrWebhookNotFound) {
+				return err
+			}
+			current, err = s.webhooks.Create(txCtx, grant, types.CreateWebhookInput{
+				URL:        webhookURL,
+				Enabled:    &enabled,
+				InstanceID: instance.Instance.ID,
+			})
+		} else {
+			current, err = s.webhooks.Update(txCtx, grant, current.ID, types.UpdateWebhookInput{
+				URL:     &webhookURL,
+				Enabled: &enabled,
+			})
+		}
+		if err != nil {
+			return err
+		}
+
+		if input.EventsSet {
+			current, err = s.webhooks.UpsertEvents(txCtx, grant, current.ID, input.Events)
+			if err != nil {
+				return err
+			}
+		}
+
+		output = current
+		return nil
+	})
 	if err != nil {
 		return types.Webhook{}, err
 	}
 
-	output, err := s.webhooks.FindByInstanceName(ctx, grant, name)
-	if err != nil {
-		if !errors.Is(err, repository.ErrWebhookNotFound) {
-			return types.Webhook{}, err
-		}
-		output, err = s.webhooks.Create(ctx, grant, types.CreateWebhookInput{
-			URL:        webhookURL,
-			Enabled:    &enabled,
-			InstanceID: instance.Instance.ID,
-		})
-	} else {
-		output, err = s.webhooks.Update(ctx, grant, output.ID, types.UpdateWebhookInput{
-			URL:     &webhookURL,
-			Enabled: &enabled,
-		})
-	}
-	if err != nil {
-		return types.Webhook{}, err
-	}
-	if input.EventsSet {
-		output, err = s.webhooks.UpsertEvents(ctx, grant, output.ID, input.Events)
-		if err != nil {
-			return types.Webhook{}, err
-		}
-	}
+	// The dispatcher may still be holding what this row said a moment ago.
+	s.configCache.forget(ctx, grant, output.InstanceID)
+
 	hlog.For(ctx).InfoContext(ctx, "webhook configured",
 		"component", "webhook_service",
 		"operation", "webhook.set",
@@ -101,6 +142,16 @@ func (s *WebhookService) Set(ctx context.Context, grant security.Grant, instance
 	)
 
 	return output, nil
+}
+
+// transaction runs fn inside a transaction on the service's handle. A service
+// built without one -- which only a test does -- runs fn directly rather than
+// pretending the writes were grouped.
+func (s *WebhookService) transaction(ctx context.Context, fn func(context.Context) error) error {
+	if s.db == nil {
+		return fn(ctx)
+	}
+	return data.Transaction(ctx, s.db, fn)
 }
 
 func (s *WebhookService) Find(ctx context.Context, grant security.Grant, instanceName string) (types.Webhook, error) {
