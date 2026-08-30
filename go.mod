@@ -3,14 +3,14 @@ module github.com/hyz-is/arandu-whatsapp
 go 1.26
 
 require (
-	github.com/arandu-io/framework v0.35.0
-	github.com/arandu-io/hesape v0.12.0
+	github.com/arandu-io/framework v0.37.0
+	github.com/arandu-io/hesape v0.14.0
 	github.com/hyz-is/arandu-swagger v0.1.0
 	github.com/lib/pq v1.12.3
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20260630180629-b572e5bcb92b
-	golang.org/x/sync v0.21.0
-	google.golang.org/protobuf v1.36.11
+	golang.org/x/sync v0.22.0
+	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.57.0
 )
 
