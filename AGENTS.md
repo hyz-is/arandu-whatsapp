@@ -50,6 +50,11 @@ repository has nothing for them to skip: `gofmt` is the only tool in the chain
 that ignores build tags, and `testdata/` is where a fixture is allowed to be
 invalid on purpose.
 
+CI runs a fifth check that cannot run from a working tree alone: `apidiff`
+between the tree and the newest release tag, which fails when a symbol stopped
+being what it was and no line added to `UPGRADE.md` names it. It needs the tags
+and the commits behind them, so it lives in CI rather than in the list above.
+
 `aru doctor` is not one of the gates, and running it here costs a minute and
 answers nothing:
 

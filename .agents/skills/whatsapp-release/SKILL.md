@@ -120,13 +120,21 @@ Before tagging:
 - the four gates pass with `GOWORK=off`;
 - `arandu.mod.toml` matches the code;
 - the release notes say what changed, under `Added`, `Changed`, `Fixed` and
-  `Removed` headings.
+  `Removed` headings;
+- `UPGRADE.md` names every symbol that stopped being what it was.
 
 While the version starts with `v0.`, breaking is allowed — freezing a shape this
 early is worse. Breaking *quietly* is not. A field that stops existing is a
 build that stops in somebody else's repository, weeks later, when they upgrade,
 with an error about a struct literal they did not write. Say what it was, what
 it is, and what they have to write instead.
+
+`UPGRADE.md` is where that goes, and CI is what asks. The `api diff against the
+last release` step runs `apidiff` in module mode between the working tree and
+the newest tag whose `go.mod` names this module, and every symbol it reports as
+removed or changed has to appear in a line added to `UPGRADE.md` since that tag.
+`CHANGELOG.md` is the other half and is not a substitute: it says what changed,
+this says what to write instead, and only one of them is written by hand.
 
 Three changes break an installer without touching a signature, and each one is
 worth a line in the changelog:
