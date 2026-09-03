@@ -5,6 +5,7 @@ import (
 
 	"github.com/arandu-io/framework/foundation"
 	hesapemigrations "github.com/arandu-io/hesape/database/migrations"
+	"github.com/arandu-io/hesape/database/schema"
 )
 
 // createMessageJobs creates the durable mention-all snapshots. The native
@@ -16,41 +17,43 @@ func (createMessageJobs) GetName() string {
 }
 
 func (createMessageJobs) Up(ctx context.Context, conn hesapemigrations.Connection) error {
-	return statements(ctx, conn,
-		`CREATE TABLE whatsapp_message_jobs (
-    process_id               VARCHAR(36) NOT NULL PRIMARY KEY,
-    message_job_id           VARCHAR(36) NOT NULL,
-    cleanup_job_id           VARCHAR(36) NOT NULL,
-    tenant_id                VARCHAR(255) NOT NULL,
-    instance_id              BIGINT NOT NULL,
-    instance_name            VARCHAR(255) NOT NULL,
-    remote_jid               VARCHAR(100) NOT NULL,
-    message_id               VARCHAR(100) NOT NULL,
-    message_type             VARCHAR(100) NOT NULL,
-    message_payload          TEXT NOT NULL,
-    content                  TEXT NOT NULL,
-    presence                 VARCHAR(32),
-    delay_ms                 BIGINT NOT NULL,
-    external_attributes      TEXT NOT NULL,
-    webhook_instance         TEXT NOT NULL,
-    created_at               TIMESTAMP NOT NULL,
-    updated_at               TIMESTAMP NOT NULL,
-    UNIQUE (tenant_id, process_id),
-    UNIQUE (tenant_id, instance_id, message_id),
-    UNIQUE (message_job_id),
-    UNIQUE (cleanup_job_id),
-    FOREIGN KEY (tenant_id, instance_id)
-        REFERENCES whatsapp_instances (tenant_id, id) ON DELETE CASCADE
-)`,
-		`CREATE INDEX whatsapp_message_jobs_instance_idx
-    ON whatsapp_message_jobs (tenant_id, instance_id, created_at, process_id)`,
-		`CREATE INDEX whatsapp_message_jobs_retention_idx
-    ON whatsapp_message_jobs (tenant_id, created_at, process_id)`,
-	)
+	return conn.Schema().Create(ctx, "whatsapp_message_jobs", func(table *schema.Blueprint) {
+		table.String("process_id", 36).Primary()
+		table.String("message_job_id", 36)
+		table.String("cleanup_job_id", 36)
+		table.String("tenant_id", 255)
+		table.BigInteger("instance_id")
+		table.String("instance_name", 255)
+		table.String("remote_jid", 100)
+		table.String("message_id", 100)
+		table.String("message_type", 100)
+		table.Text("message_payload")
+		table.Text("content")
+		table.String("presence", 32).Nullable()
+		table.BigInteger("delay_ms")
+		table.Text("external_attributes")
+		table.Text("webhook_instance")
+		table.Timestamp("created_at", microsecondPrecision)
+		table.Timestamp("updated_at", microsecondPrecision)
+
+		table.Unique([]string{"tenant_id", "process_id"}, "whatsapp_message_jobs_tenant_process_uidx")
+		// One snapshot per outbound message: the retry that re-enqueues a
+		// mention-all is refused by the engine rather than sending twice.
+		table.Unique([]string{"tenant_id", "instance_id", "message_id"}, "whatsapp_message_jobs_tenant_message_uidx")
+		table.Unique([]string{"message_job_id"}, "whatsapp_message_jobs_message_job_uidx")
+		table.Unique([]string{"cleanup_job_id"}, "whatsapp_message_jobs_cleanup_job_uidx")
+		table.Foreign([]string{"tenant_id", "instance_id"}, "whatsapp_message_jobs_instance_fk").
+			References("tenant_id", "id").
+			On("whatsapp_instances").
+			CascadeOnDelete()
+
+		table.Index([]string{"tenant_id", "instance_id", "created_at", "process_id"}, "whatsapp_message_jobs_instance_idx")
+		table.Index([]string{"tenant_id", "created_at", "process_id"}, "whatsapp_message_jobs_retention_idx")
+	})
 }
 
 func (createMessageJobs) Down(ctx context.Context, conn hesapemigrations.Connection) error {
-	return statements(ctx, conn, `DROP TABLE whatsapp_message_jobs`)
+	return conn.Schema().DropIfExists(ctx, "whatsapp_message_jobs")
 }
 
 var (
