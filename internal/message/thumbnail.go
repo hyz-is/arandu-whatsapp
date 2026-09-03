@@ -108,14 +108,14 @@ func (s *thumbnailService) FromImage(ctx context.Context, media []byte) (Thumbna
 		return Thumbnail{}, fmt.Errorf("%w: resize image: %w", ErrThumbnailFailed, err)
 	}
 	output := resized.ToJpg().Quality(s.config.JPEGQuality)
-	contents, err := output.ToBytes()
+	contents, err := output.ToBytes(ctx)
 	if err != nil {
 		return Thumbnail{}, fmt.Errorf("%w: encode jpeg: %w", ErrThumbnailFailed, err)
 	}
 	if len(contents) == 0 {
 		return Thumbnail{}, fmt.Errorf("%w: empty jpeg output", ErrThumbnailFailed)
 	}
-	width, height, err := output.Dimensions()
+	width, height, err := output.Dimensions(ctx)
 	if err != nil {
 		return Thumbnail{}, fmt.Errorf("%w: read output dimensions: %w", ErrThumbnailFailed, err)
 	}

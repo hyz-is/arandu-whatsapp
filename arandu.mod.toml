@@ -6,7 +6,7 @@
 # four lines below worth reading before installing anything.
 
 name = "hyz-is/arandu-whatsapp"
-framework = ">= 0.35"
+framework = ">= 0.42"
 profiles = ["conventional"]
 
 [permissions]
