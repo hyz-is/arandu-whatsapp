@@ -14,13 +14,13 @@ jobs:
     env:
       GOWORK: "off"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The api diff step reads the last release out of a tag, and a
           # shallow clone has neither the tags nor the commits behind them.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           # Not go-version-file: go.mod declares the MINIMUM language version,
           # and setup-go would install exactly that -- a patch release whose
