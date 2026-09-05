@@ -20,7 +20,7 @@ has to name the symbol.
 
 ---
 
-## Unreleased — the Framework floor is 0.42
+## Unreleased — the Framework floor is 0.45
 
 Nothing in this package's own API moved. `apidiff` against `v0.1.0` reports no
 incompatible change, so no call site here needs rewriting.
@@ -29,8 +29,8 @@ What moved is the minimum this package compiles against:
 
 | | was | is |
 |---|---|---|
-| `github.com/arandu-io/framework` | `v0.35.0` | `v0.42.1` |
-| `github.com/arandu-io/hesape` | `v0.12.0` | `v0.21.1` |
+| `github.com/arandu-io/framework` | `v0.35.0` | `v0.45.0` |
+| `github.com/arandu-io/hesape` | `v0.12.0` | `v0.24.0` |
 
 An application below those cannot install this version: Go resolves one version
 per module, so the floor here becomes the application's floor. Upgrade the
