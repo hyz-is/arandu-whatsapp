@@ -81,7 +81,7 @@ func TestGroupEventNormalizerUpdateAndParticipants(t *testing.T) {
 		JID:      watypes.NewJID("120363000000000000", watypes.GroupServer),
 		Sender:   &author,
 		SenderPN: &authorPN,
-		Name:     &watypes.GroupName{Name: "Novo assunto"},
+		Name:     &watypes.GroupName{Name: "New subject"},
 		Announce: &watypes.GroupAnnounce{IsAnnounce: true},
 		Join:     []watypes.JID{watypes.NewJID("5531988888888", watypes.DefaultUserServer)},
 		Promote:  []watypes.JID{watypes.NewJID("279847268053216", watypes.HiddenUserServer)},
@@ -91,7 +91,7 @@ func TestGroupEventNormalizerUpdateAndParticipants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeUpdate() error = %v", err)
 	}
-	if len(updates) != 1 || updates[0].Partial.Subject == nil || *updates[0].Partial.Subject != "Novo assunto" || updates[0].Partial.Announce == nil || !*updates[0].Partial.Announce {
+	if len(updates) != 1 || updates[0].Partial.Subject == nil || *updates[0].Partial.Subject != "New subject" || updates[0].Partial.Announce == nil || !*updates[0].Partial.Announce {
 		t.Fatalf("unexpected group update: %#v", updates)
 	}
 	participants, err := normalizer.NormalizeParticipantUpdates(event)
@@ -111,7 +111,7 @@ func TestGroupEventNormalizerUpsertParticipantsArray(t *testing.T) {
 		Notify: "invite",
 		GroupInfo: watypes.GroupInfo{
 			JID:              watypes.NewJID("120363000000000000", watypes.GroupServer),
-			GroupName:        watypes.GroupName{Name: "Grupo"},
+			GroupName:        watypes.GroupName{Name: "Group"},
 			GroupParent:      watypes.GroupParent{IsParent: true},
 			ParticipantCount: 1,
 			Participants: []watypes.GroupParticipant{{
@@ -125,7 +125,7 @@ func TestGroupEventNormalizerUpsertParticipantsArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NormalizeUpsert() error = %v", err)
 	}
-	if len(got) != 1 || got[0].Subject != "Grupo" || got[0].Participants == nil || len(got[0].Participants) != 1 {
+	if len(got) != 1 || got[0].Subject != "Group" || got[0].Participants == nil || len(got[0].Participants) != 1 {
 		t.Fatalf("unexpected group upsert: %#v", got)
 	}
 	if got[0].IsCommunity == nil || !*got[0].IsCommunity || got[0].Participants[0].Admin == nil || *got[0].Participants[0].Admin != "admin" {

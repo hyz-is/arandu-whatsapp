@@ -303,7 +303,7 @@ Content-Type: application/json
   "data": {
     "statusCode": 202,
     "status": "processing",
-    "message": "A mensagem foi aceita e esta sendo processada.",
+    "message": "The message was accepted and is being processed.",
     "processId": "019f4ec1-f9b1-7c33-a4ef-d47715cb29e4",
     "instanceName": "beplus"
   }

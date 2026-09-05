@@ -20,11 +20,11 @@ func TestLegacyBrazilianNumberWithoutNinthDigit(t *testing.T) {
 		expected string
 		changed  bool
 	}{
-		{name: "remove nono digito para DDD 31 e prefixo antigo 7", input: "5531971715555", expected: "553171715555", changed: true},
-		{name: "mantem numero quando DDD menor que 31", input: "5511971715555", expected: "5511971715555", changed: false},
-		{name: "mantem quando primeiro digito antigo menor que 7", input: "5531961715555", expected: "5531961715555", changed: false},
-		{name: "mantem numero nao brasileiro", input: "14155552671", expected: "14155552671", changed: false},
-		{name: "mantem numero com tamanho inesperado", input: "553171715555", expected: "553171715555", changed: false},
+		{name: "drops the ninth digit for area code 31 with the old prefix 7", input: "5531971715555", expected: "553171715555", changed: true},
+		{name: "keeps the number when the area code is below 31", input: "5511971715555", expected: "5511971715555", changed: false},
+		{name: "keeps it when the old first digit is below 7", input: "5531961715555", expected: "5531961715555", changed: false},
+		{name: "keeps a non-Brazilian number", input: "14155552671", expected: "14155552671", changed: false},
+		{name: "keeps a number of unexpected length", input: "553171715555", expected: "553171715555", changed: false},
 	}
 
 	for _, tt := range tests {
@@ -95,7 +95,7 @@ func TestResolver(t *testing.T) {
 		wantCalls int
 	}{
 		{
-			name:  "nono digito nao encontrado e versao sem nono encontrada",
+			name:  "the ninth-digit form is missing and the form without it is found",
 			input: "5531971715555",
 			responses: []types.IsOnWhatsAppResponse{
 				{Query: "5531971715555", IsIn: false},
@@ -105,7 +105,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:  "versao com nono encontrada",
+			name:  "the form with the ninth digit is found",
 			input: "5531971715555",
 			responses: []types.IsOnWhatsAppResponse{
 				{Query: "5531971715555", IsIn: true, JID: types.NewJID("5531971715555", types.DefaultUserServer)},
@@ -134,7 +134,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:      "nenhuma encontrada",
+			name:      "none found",
 			input:     "5531971715555",
 			responses: []types.IsOnWhatsAppResponse{{Query: "5531971715555", IsIn: false}},
 			wantErr:   ErrRecipientNotOnWhatsApp,
@@ -148,7 +148,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:      "resultado com JID vazio",
+			name:      "result carries an empty JID",
 			input:     "5531971715555",
 			responses: []types.IsOnWhatsAppResponse{{Query: "5531971715555", IsIn: true}},
 			wantErr:   ErrRecipientNotOnWhatsApp,
@@ -186,13 +186,13 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:      "grupo ignora consulta",
+			name:      "a group skips the lookup",
 			input:     "120363000000000000@g.us",
 			wantJID:   "120363000000000000@g.us",
 			wantCalls: 0,
 		},
 		{
-			name:      "lid ignora regra brasileira",
+			name:      "a lid skips the Brazilian rule",
 			input:     "123456789012345@lid",
 			wantJID:   "123456789012345@lid",
 			wantCalls: 0,

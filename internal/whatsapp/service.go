@@ -1512,7 +1512,7 @@ func (s *Service) consumeQRCodeChannel(
 				}
 				if session.isPasskeyInProgress() {
 					session.markPasskeyFailed(err)
-					s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Nao foi possivel concluir o pareamento por Passkey.")
+					s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Passkey pairing could not be completed.")
 				}
 				s.updateQRFailure(managed.RuntimeGrant, instanceID, types.InstanceConnectionStatusConnectionError, item.Event, item.Error)
 				s.trySendFirstError(firstError, err, firstSent)
@@ -1713,7 +1713,7 @@ func (s *Service) handlePasskeyConfirmation(ctx context.Context, session *pairin
 	client := clientFactory(managed)
 	if client == nil {
 		session.markPasskeyFailed(ErrClientNotConnected)
-		s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Nao foi possivel concluir o pareamento por Passkey.")
+		s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Passkey pairing could not be completed.")
 		return ErrClientNotConnected
 	}
 	session.passkeyCommandMu.Lock()
@@ -1723,7 +1723,7 @@ func (s *Service) handlePasskeyConfirmation(ctx context.Context, session *pairin
 	startedAt := time.Now()
 	if err := client.SendPasskeyConfirmation(commandCtx); err != nil {
 		session.markPasskeyFailed(err)
-		s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Nao foi possivel concluir o pareamento por Passkey.")
+		s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Passkey pairing could not be completed.")
 		hlog.For(ctx).WarnContext(ctx, "passkey confirmation failed",
 			"component", "whatsapp_service", "error", err, "instance_id", managed.InstanceID, "instance_name", managed.InstanceName,
 			"passkey_state", string(PasskeyStateFailed), "event", "connection.passkey.confirmation.failed", "duration", time.Since(startedAt))

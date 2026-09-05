@@ -150,7 +150,7 @@ func TestMessageDeleteStarUndecryptableAndSettingsWebhookData(t *testing.T) {
 	if undecryptable.KeyID != "msg-2" || undecryptable.UnavailableType != "view_once" || undecryptable.DecryptFailMode != "hide" {
 		t.Fatalf("unexpected undecryptable data: %#v", undecryptable)
 	}
-	name := "Novo nome"
+	name := "New name"
 	setting, err := settingsUpdatedWebhookData(&events.PushNameSetting{
 		Timestamp: eventTime,
 		Action:    &waSyncAction.PushNameSetting{Name: &name},
@@ -158,7 +158,7 @@ func TestMessageDeleteStarUndecryptableAndSettingsWebhookData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settingsUpdatedWebhookData() error = %v", err)
 	}
-	if setting.Type != "push.name" || setting.Name == nil || *setting.Name != "Novo nome" || setting.DateTime != eventTime.UTC() {
+	if setting.Type != "push.name" || setting.Name == nil || *setting.Name != "New name" || setting.DateTime != eventTime.UTC() {
 		t.Fatalf("unexpected settings data: %#v", setting)
 	}
 }

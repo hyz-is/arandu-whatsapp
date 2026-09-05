@@ -13,7 +13,7 @@ func TestContextInfoFromMap(t *testing.T) {
 		"keyRemoteJid": "5531999999999@s.whatsapp.net",
 		"messageType":  "extendedTextMessage",
 		"content": map[string]any{
-			"text": "Mensagem original",
+			"text": "Original message",
 		},
 	})
 	if err != nil {
@@ -25,7 +25,7 @@ func TestContextInfoFromMap(t *testing.T) {
 	if info.GetParticipant() != "" {
 		t.Fatalf("private quote must not set participant")
 	}
-	if info.GetQuotedMessage().GetExtendedTextMessage().GetText() != "Mensagem original" {
+	if info.GetQuotedMessage().GetExtendedTextMessage().GetText() != "Original message" {
 		t.Fatalf("quoted text mismatch")
 	}
 }

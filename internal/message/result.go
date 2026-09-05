@@ -37,7 +37,7 @@ func acceptedProcessing(processID string, instanceName string) *ProcessingAccept
 	return &ProcessingAcceptedResponse{
 		StatusCode:   202,
 		Status:       "processing",
-		Message:      "A mensagem foi aceita e esta sendo processada.",
+		Message:      "The message was accepted and is being processed.",
 		ProcessID:    processID,
 		InstanceName: instanceName,
 	}

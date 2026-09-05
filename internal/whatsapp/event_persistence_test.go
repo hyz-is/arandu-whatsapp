@@ -244,7 +244,7 @@ func TestHandleReceiptMissingMessageDoesNotDispatch(t *testing.T) {
 }
 
 func TestHandleContactDispatchesPersistedContact(t *testing.T) {
-	pushName := "Contato"
+	pushName := "Contact"
 	profilePic := "https://example.com/avatar.jpg"
 	contacts := &fakePersistenceContacts{upserted: dbtypes.Contact{
 		ID:            41,
@@ -274,7 +274,7 @@ func TestHandleContactDispatchesPersistedContact(t *testing.T) {
 }
 
 func TestHandlePushNameDispatchesContactsUpdateAfterPersist(t *testing.T) {
-	pushName := "Novo nome"
+	pushName := "New name"
 	contacts := &fakePersistenceContacts{upserted: dbtypes.Contact{
 		ID:        42,
 		RemoteJid: "5531988888888@s.whatsapp.net",
@@ -286,7 +286,7 @@ func TestHandlePushNameDispatchesContactsUpdateAfterPersist(t *testing.T) {
 
 	service.HandlePushName(context.Background(), eventManagedClient(), pushNameEvent())
 
-	if contacts.upsertCalls != 1 || contacts.input.PushName == nil || *contacts.input.PushName != "Novo nome" {
+	if contacts.upsertCalls != 1 || contacts.input.PushName == nil || *contacts.input.PushName != "New name" {
 		t.Fatalf("expected contact upsert before dispatch, calls=%d input=%+v", contacts.upsertCalls, contacts.input)
 	}
 	if webhooks.dispatchCalls != 1 || webhooks.event != dbtypes.WebhookEventContactsUpdated {
@@ -296,7 +296,7 @@ func TestHandlePushNameDispatchesContactsUpdateAfterPersist(t *testing.T) {
 	if !ok || len(data) != 1 {
 		t.Fatalf("expected one contact update item, got %T %#v", webhooks.data, webhooks.data)
 	}
-	if data[0].ID != 42 || data[0].Source != "pushName" || data[0].Action != "updated" || data[0].PushName == nil || *data[0].PushName != "Novo nome" {
+	if data[0].ID != 42 || data[0].Source != "pushName" || data[0].Action != "updated" || data[0].PushName == nil || *data[0].PushName != "New name" {
 		t.Fatalf("unexpected contacts.update data: %#v", data[0])
 	}
 }
@@ -498,7 +498,7 @@ func contactEvent() *events.Contact {
 	return &events.Contact{
 		JID: jid,
 		Action: &waSyncAction.ContactAction{
-			FullName: proto.String("Contato"),
+			FullName: proto.String("Contact"),
 			PnJID:    proto.String(jid.String()),
 			LidJID:   proto.String("279847268053216@lid"),
 		},
@@ -510,7 +510,7 @@ func pushNameEvent() *events.PushName {
 		JID:         watypes.NewJID("5531988888888", watypes.DefaultUserServer),
 		JIDAlt:      watypes.NewJID("279847268053216", watypes.HiddenUserServer),
 		OldPushName: "Antigo",
-		NewPushName: "Novo nome",
+		NewPushName: "New name",
 	}
 }
 

@@ -171,7 +171,7 @@ func (s *Service) SubmitPasskeyAssertion(ctx context.Context, grant security.Gra
 	startedAt := time.Now()
 	if err := client.SendPasskeyResponse(commandCtx, &request.Assertion); err != nil {
 		session.markPasskeyFailed(err)
-		s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Nao foi possivel concluir o pareamento por Passkey.")
+		s.publishPasskeyFailed(managed, "PASSKEY_PAIRING_FAILED", "Passkey pairing could not be completed.")
 		s.updateQRFailure(managed.RuntimeGrant, mustAtoi64(managed.InstanceID), dbtypes.InstanceConnectionStatusConnectionError, "passkey_response_error", nil)
 		hlog.For(ctx).WarnContext(ctx, "passkey assertion submission failed",
 			"component", "whatsapp_service", "error", err, "instance_id", managed.InstanceID, "instance_name", managed.InstanceName,
