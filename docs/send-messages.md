@@ -1,16 +1,16 @@
-# Envio de mensagens
+# Sending messages
 
-Este documento descreve os endpoints de envio em
-`/whatsapp/instances/{instance}/messages` e o recurso `options.mentionAll`.
+This document describes the sending endpoints under
+`/whatsapp/instances/{instance}/messages` and the `options.mentionAll` feature.
 
-Todas as rotas exigem uma sessão Arandu no tenant configurado e uma role
-autorizada para `ActionMessageSend`:
+Every route requires an Arandu session in the configured tenant and a role
+authorized for `ActionMessageSend`:
 
 ```http
 Cookie: arandu_session=<host-session>
 ```
 
-Rotas disponíveis:
+Available routes:
 
 ```text
 POST /whatsapp/instances/{instance}/messages/text
@@ -24,12 +24,12 @@ POST /whatsapp/instances/{instance}/messages/location
 POST /whatsapp/instances/{instance}/messages/reaction
 ```
 
-A identidade vem da sessão Arandu e do Grant emitido pela política. Respostas JSON são recursos
-Arandu e ficam sob a chave `data`.
+The identity comes from the Arandu session and the Grant the policy issues. JSON responses are
+Arandu resources and live under the `data` key.
 
 ## MessageOptions
 
-`MessageOptions` é opcional. Quando `mentionAll` está ausente ou é `false`, o envio continua síncrono e retorna a mensagem persistida com `200 OK`.
+`MessageOptions` is optional. When `mentionAll` is absent or `false`, the send stays synchronous and returns the persisted message with `200 OK`.
 
 ```json
 {
@@ -50,19 +50,19 @@ Arandu e ficam sob a chave `data`.
 }
 ```
 
-`delay`: inteiro opcional em milissegundos. Envios gerais de mensagem aceitam até `120000`. Envios de áudio do WhatsApp aceitam até `300000`.
+`delay`: optional integer in milliseconds. General message sends accept up to `120000`. WhatsApp audio sends accept up to `300000`.
 
-`presence`: string opcional. Texto, link, mídia, contato e localização aceitam `composing`. Áudio/PTV aceita `recording`. Áudio do WhatsApp também aceita `paused`.
+`presence`: optional string. Text, link, media, contact and location accept `composing`. Audio and PTV accept `recording`. WhatsApp audio also accepts `paused`.
 
-`quotedMessageId`: id interno opcional da mensagem a ser citada. A mensagem precisa pertencer à mesma instância.
+`quotedMessageId`: optional internal id of the message to quote. The message has to belong to the same instance.
 
-`quotedMessage`: snapshot opcional da mensagem citada com `keyId`, `keyRemoteJid`, `messageType` e `content`.
+`quotedMessage`: optional snapshot of the quoted message, carrying `keyId`, `keyRemoteJid`, `messageType` and `content`.
 
-`externalAttributes`: objeto opcional copiado para os metadados da mensagem persistida e para os webhooks de resultado assíncrono de `mentionAll`.
+`externalAttributes`: optional object copied into the persisted message's metadata and into the asynchronous `mentionAll` result webhooks.
 
-`mentionAll`: booleano opcional. Quando `true`, o destinatário precisa ser um JID de grupo e a mensagem é aceita para processamento assíncrono quando o tipo da mensagem protobuf do WhatsApp suporta `ContextInfo`.
+`mentionAll`: optional boolean. When `true`, the recipient has to be a group JID, and the message is accepted for asynchronous processing when the WhatsApp protobuf message type supports `ContextInfo`.
 
-## Bodies dos endpoints
+## Endpoint bodies
 
 ### sendText
 
@@ -80,12 +80,12 @@ Content-Type: application/json
     "delay": 1000
   },
   "textMessage": {
-    "text": "Aviso importante para todos."
+    "text": "An important notice for everyone."
   }
 }
 ```
 
-Suporta `mentionAll`.
+Supports `mentionAll`.
 
 ### sendLink
 
@@ -109,7 +109,7 @@ Content-Type: application/json
 }
 ```
 
-Suporta `mentionAll`.
+Supports `mentionAll`.
 
 ### sendMedia
 
@@ -133,7 +133,7 @@ Content-Type: application/json
 }
 ```
 
-`mediatype` aceita `image`, `document`, `video`, `audio` e `ptv`. Suporta `mentionAll`.
+`mediatype` accepts `image`, `document`, `video`, `audio` and `ptv`. Supports `mentionAll`.
 
 ### sendMediaFile
 
@@ -142,7 +142,7 @@ POST /whatsapp/instances/beplus/messages/media/file
 Content-Type: multipart/form-data
 ```
 
-Campos multipart:
+Multipart fields:
 
 ```json
 {
@@ -158,7 +158,7 @@ Campos multipart:
 }
 ```
 
-`attachment` é o campo do arquivo. `mediaType` aceita `image`, `document`, `video`, `audio` e `ptv`. Suporta `mentionAll`.
+`attachment` is the file field. `mediaType` accepts `image`, `document`, `video`, `audio` and `ptv`. Supports `mentionAll`.
 
 ### sendWhatsAppAudio
 
@@ -179,7 +179,7 @@ Content-Type: application/json
 }
 ```
 
-Baixa o áudio, converte/prepara como áudio PTT do WhatsApp e envia um `audioMessage`. Suporta `mentionAll`.
+Downloads the audio, converts and prepares it as WhatsApp PTT audio, and sends an `audioMessage`. Supports `mentionAll`.
 
 ### sendWhatsAppAudioFile
 
@@ -188,7 +188,7 @@ POST /whatsapp/instances/beplus/messages/audio/file
 Content-Type: multipart/form-data
 ```
 
-Campos multipart:
+Multipart fields:
 
 ```json
 {
@@ -202,7 +202,7 @@ Campos multipart:
 }
 ```
 
-`attachment` é o campo do arquivo de áudio. Suporta `mentionAll`.
+`attachment` is the audio file field. Supports `mentionAll`.
 
 ### sendContact
 
@@ -230,7 +230,7 @@ Content-Type: application/json
 }
 ```
 
-`contactMessage` aceita um ou mais contatos. Se `vcard` for omitido, o serviço gera um a partir de `fullName`, `wuid`, `phoneNumber` e `organization`. Suporta `mentionAll`.
+`contactMessage` accepts one or more contacts. If `vcard` is omitted, the service builds one from `fullName`, `wuid`, `phoneNumber` and `organization`. Supports `mentionAll`.
 
 ### sendLocation
 
@@ -255,7 +255,7 @@ Content-Type: application/json
 }
 ```
 
-Suporta `mentionAll`.
+Supports `mentionAll`.
 
 ### sendReaction
 
@@ -277,21 +277,21 @@ Content-Type: application/json
 }
 ```
 
-Não suporta `mentionAll` porque `ReactionMessage` aponta para uma mensagem existente e não tem um campo `ContextInfo.MentionedJID` válido. Se `options.mentionAll=true`, a API retorna `400 Bad Request` com o código `MENTION_ALL_NOT_SUPPORTED_FOR_MESSAGE_TYPE`.
+Does not support `mentionAll`, because `ReactionMessage` points at an existing message and has no valid `ContextInfo.MentionedJID` field. If `options.mentionAll=true`, the API answers `400 Bad Request` with the code `MENTION_ALL_NOT_SUPPORTED_FOR_MESSAGE_TYPE`.
 
-## Respostas de sucesso
+## Success responses
 
-Envios síncronos:
+Synchronous sends:
 
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
 ```
 
-O corpo é `{"data": <mensagem persistida>}`. O webhook `send.message` é
-disparado depois da persistência.
+The body is `{"data": <persisted message>}`. The `send.message` webhook fires
+after persistence.
 
-Envios assíncronos com `mentionAll`:
+Asynchronous sends with `mentionAll`:
 
 ```http
 HTTP/1.1 202 Accepted
@@ -310,16 +310,15 @@ Content-Type: application/json
 }
 ```
 
-`202 Accepted` significa que o snapshot, o job de processamento e o job de
-retenção foram confirmados na mesma transação do banco. O resultado final é
-entregue pelo webhook existente `send.message` e correlacionado por
-`processId`.
+`202 Accepted` means the snapshot, the processing job and the retention job were
+committed in the same database transaction. The final result is delivered by the
+existing `send.message` webhook and correlated through `processId`.
 
-## Menção invisível
+## Invisible mentions
 
-`mentionAll=true` menciona todos os participantes atuais do grupo preenchendo `ContextInfo.MentionedJID` do WhatsApp. O servidor não adiciona marcadores visíveis `@phone` ao texto, legendas, cartões de contato, localizações ou corpos de mídia.
+`mentionAll=true` mentions every current participant of the group by filling WhatsApp's `ContextInfo.MentionedJID`. The server adds no visible `@phone` markers to the text, captions, contact cards, locations or media bodies.
 
-Endpoints suportados:
+Supported endpoints:
 
 ```text
 sendText
@@ -332,23 +331,23 @@ sendContact
 sendLocation
 ```
 
-Endpoints não suportados:
+Unsupported endpoints:
 
 ```text
 sendReaction
 ```
 
-A lista de participantes é buscada quando o worker processa o job. Participantes que entrarem depois dessa busca não serão mencionados. Participantes que saírem durante o processamento ainda podem estar presentes na lista buscada.
+The participant list is fetched when the worker processes the job. Participants who join after that fetch are not mentioned. Participants who leave during processing may still be present in the fetched list.
 
-## Resultado por webhook
+## The result arrives by webhook
 
-O evento de webhook existente é reutilizado:
+The existing webhook event is reused:
 
 ```text
 send.message
 ```
 
-Exemplo de sucesso:
+A success example:
 
 ```json
 {
@@ -378,7 +377,7 @@ Exemplo de sucesso:
 }
 ```
 
-Exemplo de falha:
+A failure example:
 
 ```json
 {
@@ -396,7 +395,7 @@ Exemplo de falha:
     "mentionAll": true,
     "error": {
       "code": "GROUP_MENTION_PROCESSING_FAILED",
-      "message": "Nao foi possivel concluir o envio da mensagem para o grupo."
+      "message": "The group message could not be completed."
     },
     "externalAttributes": {
       "requestId": "request-456"
@@ -406,7 +405,7 @@ Exemplo de falha:
 }
 ```
 
-Códigos de erro implementados para webhooks assíncronos:
+Error codes implemented for the asynchronous webhooks:
 
 ```text
 INSTANCE_NOT_CONNECTED
@@ -416,9 +415,9 @@ MESSAGE_SEND_FAILED
 GROUP_MENTION_PROCESSING_FAILED
 ```
 
-## Erros HTTP
+## HTTP errors
 
-O destinatário não é um grupo:
+The recipient is not a group:
 
 ```json
 {
@@ -433,7 +432,7 @@ O destinatário não é um grupo:
 }
 ```
 
-O tipo de mensagem não suporta `mentionAll`:
+The message type does not support `mentionAll`:
 
 ```json
 {
@@ -448,76 +447,76 @@ O tipo de mensagem não suporta `mentionAll`:
 }
 ```
 
-Outros erros de validação, autenticação, instância, mídia, upload, persistência e conexão com o WhatsApp mantêm o envelope padrão de erro da API.
+Other errors of validation, authentication, instance, media, upload, persistence and the WhatsApp connection keep the API's standard error envelope.
 
-## Comportamento da fila
+## Queue behaviour
 
-Envios assíncronos usam a `DatabaseQueue` nativa do Hesape. O pacote persiste o
-protobuf preparado e seus metadados em `whatsapp_message_jobs`; o payload da
-fila contém somente `processId`, portanto mensagens maiores que o limite de 32
-KiB da fila continuam seguras no snapshot SQL. A criação do snapshot, do job de
-processamento e do job de retenção ocorre em uma única transação: todos existem
-ou nenhum é aceito.
+Asynchronous sends use Hesape's native `DatabaseQueue`. The package persists the
+prepared protobuf and its metadata in `whatsapp_message_jobs`; the queue payload
+carries only `processId`, so messages larger than the queue's 32 KiB limit stay
+safe in the SQL snapshot. Creating the snapshot, the processing job and the
+retention job happens in a single transaction: either all of them exist or none
+is accepted.
 
-A aplicação registra o handler explicitamente com
-`Module.RegisterJobHandlers` e executa a fila dedicada:
+The application registers the handler explicitly with
+`Module.RegisterJobHandlers` and runs the dedicated queue:
 
 ```bash
 aru queue:work --queue=whatsapp-messages --workers=N
 ```
 
-O worker reemite o Grant com o mesmo tenant e a mesma action
-`whatsapp.message.send` gravados pelo Hesape. Cada job admite cinco tentativas
-com backoff. O `messageId` é estável entre tentativas, o snapshot é removido
-somente depois que mensagem persistida, webhook de resultado e conclusão são
-confirmados; snapshot ausente é tratado como conclusão idempotente. Em uma
-falha terminal, o pacote remove o snapshot somente depois de confirmar o job
-durável do webhook de erro. Se essa confirmação falhar, o dead letter conserva
-o snapshot para `queue:retry` até o limite de retenção. Ao expirar, o job nativo
-de limpeza remove tanto o snapshot quanto o job principal, impedindo retenção
-indefinida do conteúdo da mensagem.
+The worker reissues the Grant with the same tenant and the same
+`whatsapp.message.send` action Hesape recorded. Each job allows five attempts
+with backoff. The `messageId` is stable across attempts, and the snapshot is
+removed only after the persisted message, the result webhook and the completion
+are committed; a missing snapshot is treated as an idempotent completion. On a
+terminal failure, the package removes the snapshot only after committing the
+durable job for the error webhook. If that commit fails, the dead letter keeps
+the snapshot available to `queue:retry` up to the retention limit. On expiry,
+the native cleanup job removes both the snapshot and the main job, which is what
+stops message content being retained indefinitely.
 
-## Configuração Arandu
+## Arandu configuration
 
-O módulo não lê variáveis de ambiente. A aplicação fornece
-`Config.Processing` (`ProcessingTimeout`, `GroupInfoTimeout`, `SendTimeout` e
-`Retention`) e
-`Config.Media` (limites, timeout, diretório temporário e caminhos de
-`ffmpeg`/`ffprobe`). `Processing.Workers` e `Processing.QueueSize` são mantidos
-apenas por compatibilidade e ignorados; concorrência pertence a
-`aru queue:work --workers=N`. Os padrões são 60s para o processamento completo,
-30s para lookup/envio e 30 dias para retenção recuperável.
+The module reads no environment variables. The application provides
+`Config.Processing` (`ProcessingTimeout`, `GroupInfoTimeout`, `SendTimeout` and
+`Retention`) and
+`Config.Media` (limits, timeout, temporary directory and the paths to
+`ffmpeg` and `ffprobe`). `Processing.Workers` and `Processing.QueueSize` are kept
+for compatibility only and are ignored; concurrency belongs to
+`aru queue:work --workers=N`. The defaults are 60s for the full processing, 30s
+for lookup and send, and 30 days for recoverable retention.
 
-## Fluxo de processamento
+## Processing flow
 
 ```text
-1. O cliente envia uma mensagem compatível com options.mentionAll=true.
-2. A API valida autenticação, instância, payload e destinatário.
-3. A API confirma que o destinatário é um JID de grupo.
-4. A API prepara o protobuf e cria um `processId` com `data.NewID`.
-5. A API persiste o snapshot e os jobs de processamento e retenção da `DatabaseQueue` na mesma transação.
-6. A API retorna HTTP 202 Accepted.
-7. Um worker recarrega a instância e resolve a sessão WhatsApp conectada naquele momento.
-8. O worker busca os participantes atuais do grupo.
-9. Os JIDs dos participantes são deduplicados e adicionados a ContextInfo.MentionedJID.
-10. O corpo visível original da mensagem é preservado.
-11. A mensagem é enviada pelo whatsmeow.
-12. A persistência, o webhook durável de resultado e a remoção do snapshot e do job de retenção são confirmados atomicamente.
+1. The client sends a message compatible with options.mentionAll=true.
+2. The API validates the authentication, the instance, the payload and the recipient.
+3. The API confirms the recipient is a group JID.
+4. The API prepares the protobuf and creates a `processId` with `data.NewID`.
+5. The API persists the snapshot and the DatabaseQueue processing and retention jobs in the same transaction.
+6. The API returns HTTP 202 Accepted.
+7. A worker reloads the instance and resolves the WhatsApp session connected at that moment.
+8. The worker fetches the group's current participants.
+9. The participant JIDs are deduplicated and added to ContextInfo.MentionedJID.
+10. The original visible body of the message is preserved.
+11. The message is sent through whatsmeow.
+12. Persistence, the durable result webhook, and removal of the snapshot and the retention job are committed atomically.
 ```
 
-## Limitações conhecidas
+## Known limitations
 
-`mentionAll` funciona somente para JIDs de grupo com servidor `g.us`.
+`mentionAll` works only for group JIDs on the `g.us` server.
 
-O servidor não adiciona marcadores visíveis `@phone`.
+The server adds no visible `@phone` markers.
 
-`sendReaction` rejeita `mentionAll` porque reações não carregam um `ContextInfo` válido no nível da mensagem.
+`sendReaction` rejects `mentionAll`, because reactions carry no valid message-level `ContextInfo`.
 
-Grupos muito grandes podem aumentar o tempo de processamento.
+Very large groups can increase the processing time.
 
-`202 Accepted` confirma apenas que o snapshot e os jobs duráveis foram gravados;
-não confirma que o WhatsApp já enviou a mensagem.
+`202 Accepted` confirms only that the snapshot and the durable jobs were written;
+it does not confirm that WhatsApp has sent the message yet.
 
-O webhook é a fonte do resultado final.
+The webhook is the source of the final result.
 
-Clientes WhatsApp podem exibir ou notificar menções invisíveis de formas diferentes.
+WhatsApp clients may display or notify invisible mentions in different ways.
