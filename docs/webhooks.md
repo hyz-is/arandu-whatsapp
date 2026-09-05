@@ -27,7 +27,7 @@ As entregas usam a `DatabaseQueue` nativa do Hesape. A aplicação registra o ha
 - Eventos oficiais documentados: `27`.
 - Pacote de constantes: `internal/database/types/webhook.go`.
 - Dispatcher: `internal/webhook/manager.go`.
-- Versão auditada do whatsmeow: `v0.0.0-20260630180629-b572e5bcb92b`.
+- Versão auditada do whatsmeow: `v0.0.0-20260904121843-28bfe537ea6a`.
 
 Os exemplos de eventos com campos estáticos são verificados com `hesape/jsonschema` v0.12. Nos eventos marcados com campos dinâmicos, a presença e o tipo raiz de `data` continuam verificados, mas o objeto não é fechado nem validado campo a campo: esse builder não representa objetos abertos, e fechar esses objetos rejeitaria propriedades legítimas vindas do whatsmeow.
 

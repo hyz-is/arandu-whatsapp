@@ -8,7 +8,7 @@ import (
 
 const (
 	documentVersion  = "1.2.0"
-	whatsmeowVersion = "v0.0.0-20260630180629-b572e5bcb92b"
+	whatsmeowVersion = "v0.0.0-20260904121843-28bfe537ea6a"
 )
 
 // Document is the structured source used to generate the public webhook docs.

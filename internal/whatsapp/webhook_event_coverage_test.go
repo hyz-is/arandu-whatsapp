@@ -13,7 +13,7 @@ import (
 	dbtypes "github.com/hyz-is/arandu-whatsapp/internal/database/types"
 )
 
-const auditedWhatsmeowVersion = "v0.0.0-20260630180629-b572e5bcb92b"
+const auditedWhatsmeowVersion = "v0.0.0-20260904121843-28bfe537ea6a"
 
 func TestWhatsmeowVersionForWebhookCoverage(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
