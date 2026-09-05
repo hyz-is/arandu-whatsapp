@@ -114,7 +114,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:  "ambas retornam mesmo JID",
+			name:  "both return the same JID",
 			input: "5531971715555",
 			responses: []types.IsOnWhatsAppResponse{
 				{Query: "5531971715555", IsIn: true, JID: types.NewJID("553171715555", types.DefaultUserServer)},
@@ -124,7 +124,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:  "ambas retornam JIDs diferentes",
+			name:  "both return different JIDs",
 			input: "5531971715555",
 			responses: []types.IsOnWhatsAppResponse{
 				{Query: "5531971715555", IsIn: true, JID: types.NewJID("5531971715555", types.DefaultUserServer)},
@@ -155,7 +155,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
-			name:  "cache valido",
+			name:  "a valid cache entry",
 			input: "5531971715555",
 			cache: &AddressMapping{
 				InstanceID:      42,
@@ -169,7 +169,7 @@ func TestResolver(t *testing.T) {
 			wantCalls: 0,
 		},
 		{
-			name:  "cache expirado",
+			name:  "an expired cache entry",
 			input: "5531971715555",
 			cache: &AddressMapping{
 				InstanceID:      42,

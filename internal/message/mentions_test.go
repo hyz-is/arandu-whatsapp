@@ -41,7 +41,7 @@ func TestMentionedJIDsFromParticipantsDeduplicatesAndIgnoresInvalid(t *testing.T
 }
 
 func TestApplyMentionedJIDsPreservesQuotedContextAndText(t *testing.T) {
-	text := "Aviso importante para todos."
+	text := "An important notice for everyone."
 	message := &wae2e.Message{ExtendedTextMessage: &wae2e.ExtendedTextMessage{
 		Text: proto.String(text),
 		ContextInfo: &wae2e.ContextInfo{

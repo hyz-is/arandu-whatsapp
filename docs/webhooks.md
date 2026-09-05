@@ -2091,7 +2091,7 @@ x-webhook-event: user.about.update
   "data": {
     "dateTime": "2026-07-04T18:00:00Z",
     "jid": "5511999999999@s.whatsapp.net",
-    "status": "Disponivel"
+    "status": "Available"
   },
   "event": "user.about.update",
   "instance": {

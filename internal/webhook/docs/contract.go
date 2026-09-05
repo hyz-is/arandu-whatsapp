@@ -1113,7 +1113,7 @@ func userAboutUpdateDoc() EventDoc {
 		},
 		Example: envelope(dbtypes.WebhookEventUserAboutUpdated, map[string]any{
 			"jid":      "5511999999999@s.whatsapp.net",
-			"status":   "Disponivel",
+			"status":   "Available",
 			"dateTime": "2026-07-04T18:00:00Z",
 		}),
 		ImplementedIn: []string{

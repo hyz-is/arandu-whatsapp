@@ -186,7 +186,7 @@ func (s *Service) SubmitPasskeyAssertion(ctx context.Context, grant security.Gra
 		"event", "connection.passkey.assertion.submitted", "duration", time.Since(startedAt))
 	return PasskeyAssertionResult{
 		State:   PasskeyStateAwaitingConfirmation,
-		Message: "A assertion foi enviada ao WhatsApp.",
+		Message: "The assertion was sent to WhatsApp.",
 	}, nil
 }
 
