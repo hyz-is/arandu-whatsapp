@@ -25,64 +25,64 @@ func Markdown(doc Document) (string, error) {
 
 	writeLine(&buffer, "# Webhooks")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Documentação técnica dos webhooks implementados no código executável atual.")
+	writeLine(&buffer, "Technical documentation of the webhooks implemented in the executable code as it stands.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Sumário")
+	writeLine(&buffer, "## Contents")
 	for _, section := range []string{
-		"Visão geral",
-		"Configuração",
-		"Mapa de eventos",
-		"Headers HTTP",
-		"Envelope padrão",
-		"Estrutura da instância",
-		"Entrega e tratamento de erros",
-		"Eventos",
-		"Eventos não suportados ou ignorados",
+		"Overview",
+		"Configuration",
+		"Event map",
+		"HTTP headers",
+		"Standard envelope",
+		"Instance structure",
+		"Delivery and error handling",
+		"Events",
+		"Unsupported or ignored events",
 	} {
 		writeLine(&buffer, "- [%s](#%s)", section, anchor(section))
 	}
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Visão geral")
+	writeLine(&buffer, "## Overview")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Webhooks são requisições HTTP `POST` assíncronas enviadas pela aplicação para uma URL configurada pelo consumidor. Cada entrega contém um envelope comum com o nome externo do evento, a instância que originou o evento, os dados específicos de `data` e o `timestamp` de criação do webhook.")
+	writeLine(&buffer, "Webhooks are asynchronous HTTP `POST` requests the application sends to a URL the consumer configures. Every delivery carries a common envelope holding the external event name, the instance the event came from, the event-specific `data` and the `timestamp` the webhook was created at.")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Existem dois destinos possíveis. Com o `Config.Prefix` padrão, o webhook da instância é configurado por `PUT /whatsapp/instances/{instance}/webhook`; o dispatcher consulta essa configuração diretamente no banco e só cria entregas para eventos cujas flags estejam habilitadas em `events`. O webhook global é configurado por `Config.Webhooks.GlobalURL` e `Config.Webhooks.GlobalEnabled`; quando habilitado, recebe todos os eventos suportados, sem aplicar as flags da instância.")
+	writeLine(&buffer, "There are two possible destinations. With the default `Config.Prefix`, the instance webhook is configured through `PUT /whatsapp/instances/{instance}/webhook`; the dispatcher reads that configuration straight from the database and creates deliveries only for events whose flags are enabled in `events`. The global webhook is configured through `Config.Webhooks.GlobalURL` and `Config.Webhooks.GlobalEnabled`; when enabled it receives every supported event, without applying the instance flags.")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Para cada destino habilitado, o módulo salva um snapshot imutável da URL, body e headers em `whatsapp_webhook_deliveries` e inclui, na mesma transação, um job que carrega somente o `deliveryId`. Se a instância não tiver webhook habilitado e o webhook global estiver desabilitado, o evento é descartado sem erro.")
+	writeLine(&buffer, "For each enabled destination, the module saves an immutable snapshot of the URL, body and headers in `whatsapp_webhook_deliveries` and, in the same transaction, inserts a job carrying only the `deliveryId`. If the instance has no webhook enabled and the global webhook is disabled, the event is dropped without an error.")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "As entregas usam a `DatabaseQueue` nativa do Hesape. A aplicação registra o handler com `Module.RegisterJobHandlers`, inclui `whatsapp.WebhookQueueName` entre as filas monitoradas por `jobs.NewModule` e executa `aru queue:work --queue=whatsapp-webhooks --workers=N`. Respostas HTTP `2xx` são sucesso; erros de rede, timeout e respostas não `2xx` retornam erro para retry com o mesmo `X-Arandu-Delivery-ID`. A ordem relativa entre eventos não é garantida.")
+	writeLine(&buffer, "Deliveries use Hesape's native `DatabaseQueue`. The application registers the handler with `Module.RegisterJobHandlers`, includes `whatsapp.WebhookQueueName` among the queues `jobs.NewModule` watches, and runs `aru queue:work --queue=whatsapp-webhooks --workers=N`. HTTP `2xx` responses are a success; network errors, timeouts and non-`2xx` responses return an error so the job retries with the same `X-Arandu-Delivery-ID`. The relative order between events is not guaranteed.")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "- Versão do documento: `%s`.", doc.Version)
-	writeLine(&buffer, "- Eventos oficiais documentados: `%d`.", len(doc.Events))
-	writeLine(&buffer, "- Pacote de constantes: `%s`.", doc.GeneratedFrom.ConstantsPackage)
+	writeLine(&buffer, "- Document version: `%s`.", doc.Version)
+	writeLine(&buffer, "- Official events documented: `%d`.", len(doc.Events))
+	writeLine(&buffer, "- Constants package: `%s`.", doc.GeneratedFrom.ConstantsPackage)
 	writeLine(&buffer, "- Dispatcher: `%s`.", doc.GeneratedFrom.Dispatcher)
-	writeLine(&buffer, "- Versão auditada do whatsmeow: `%s`.", doc.GeneratedFrom.WhatsmeowVersion)
+	writeLine(&buffer, "- Audited whatsmeow version: `%s`.", doc.GeneratedFrom.WhatsmeowVersion)
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Os exemplos de eventos com campos estáticos são verificados com `hesape/jsonschema` v0.12. Nos eventos marcados com campos dinâmicos, a presença e o tipo raiz de `data` continuam verificados, mas o objeto não é fechado nem validado campo a campo: esse builder não representa objetos abertos, e fechar esses objetos rejeitaria propriedades legítimas vindas do whatsmeow.")
+	writeLine(&buffer, "Examples of events with static fields are verified with `hesape/jsonschema` v0.12. For events marked as carrying dynamic fields, the presence and root type of `data` are still verified, but the object is neither closed nor validated field by field: that builder cannot express open objects, and closing these would reject legitimate properties coming from whatsmeow.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Configuração")
+	writeLine(&buffer, "## Configuration")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "### Configuração tipada")
+	writeLine(&buffer, "### Typed configuration")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "O módulo não lê variáveis de ambiente. A aplicação host fornece:")
+	writeLine(&buffer, "The module reads no environment variables. The host application provides:")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "| Campo | Tipo | Padrão | Descrição |")
+	writeLine(&buffer, "| Field | Type | Default | Description |")
 	writeLine(&buffer, "| --- | --- | --- | --- |")
-	writeLine(&buffer, "| `Config.Webhooks.GlobalURL` | URL | vazio | URL HTTP ou HTTPS do webhook global. |")
-	writeLine(&buffer, "| `Config.Webhooks.GlobalEnabled` | boolean | `false` | Habilita o webhook global; exige `GlobalURL`. |")
-	writeLine(&buffer, "| `Config.Webhooks.SigningSecret` | string | vazio | Segredo HMAC com no mínimo 32 bytes; obrigatório antes de habilitar qualquer webhook. |")
-	writeLine(&buffer, "| `Config.Webhooks.Retention` | duração | `720h` (30 dias) | Tempo máximo de retenção de snapshots, inclusive falhas; zero usa o padrão. |")
-	writeLine(&buffer, "| `Config.Webhooks.Workers` | inteiro | ignorado | Obsoleto; configure `--workers=N` em `aru queue:work`. |")
-	writeLine(&buffer, "| `Config.Webhooks.QueueSize` | inteiro | ignorado | Obsoleto; a fila nativa é durável no banco. |")
+	writeLine(&buffer, "| `Config.Webhooks.GlobalURL` | URL | empty | HTTP or HTTPS URL of the global webhook. |")
+	writeLine(&buffer, "| `Config.Webhooks.GlobalEnabled` | boolean | `false` | Enables the global webhook; requires `GlobalURL`. |")
+	writeLine(&buffer, "| `Config.Webhooks.SigningSecret` | string | empty | HMAC secret of at least 32 bytes; required before enabling any webhook. |")
+	writeLine(&buffer, "| `Config.Webhooks.Retention` | duration | `720h` (30 days) | Longest a snapshot is retained, failures included; zero uses the default. |")
+	writeLine(&buffer, "| `Config.Webhooks.Workers` | integer | ignored | Obsolete; set `--workers=N` on `aru queue:work` instead. |")
+	writeLine(&buffer, "| `Config.Webhooks.QueueSize` | integer | ignored | Obsolete; the native queue is durable in the database. |")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "A aplicação host precisa aplicar também as migrations da `DatabaseQueue`, registrar o handler do módulo no worker e consumir a fila `whatsapp-webhooks`.")
+	writeLine(&buffer, "The host application also has to apply the `DatabaseQueue` migrations, register the module's handler on the worker and consume the `whatsapp-webhooks` queue.")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "### Webhook da instância")
+	writeLine(&buffer, "### Instance webhook")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Configurar ou atualizar:")
+	writeLine(&buffer, "To configure or update it:")
 	writeLine(&buffer, "")
 	writeLine(&buffer, "```http")
 	writeLine(&buffer, "PUT /whatsapp/instances/beplus/webhook HTTP/1.1")
@@ -90,39 +90,39 @@ func Markdown(doc Document) (string, error) {
 	writeLine(&buffer, "Content-Type: application/json")
 	writeLine(&buffer, "```")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Consultar:")
+	writeLine(&buffer, "To read it:")
 	writeLine(&buffer, "")
 	writeLine(&buffer, "```http")
 	writeLine(&buffer, "GET /whatsapp/instances/beplus/webhook HTTP/1.1")
 	writeLine(&buffer, "Cookie: arandu_session=<host-session>")
 	writeLine(&buffer, "```")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "As duas rotas autenticam pela sessão Arandu e exigem Grants emitidos pela política para, respectivamente, `ActionWebhookSet` e `ActionWebhookView`. Respostas de configuração usam o envelope Arandu:")
+	writeLine(&buffer, "Both routes authenticate through the Arandu session and require Grants issued by the policy for `ActionWebhookSet` and `ActionWebhookView` respectively. Configuration responses use the Arandu envelope:")
 	if err := writeJSONBlock(&buffer, map[string]any{"data": instanceConfigExample(doc)}); err != nil {
 		return "", err
 	}
 	writeLine(&buffer, "")
-	writeLine(&buffer, "`url` precisa usar `http` ou `https` e ter no máximo 500 caracteres. `enabled` ausente assume `true` na criação/atualização. Quando `events` é omitido, as flags existentes são preservadas; quando `events` é `{}`, as flags são removidas. Campos desconhecidos em `events` são rejeitados.")
+	writeLine(&buffer, "`url` has to use `http` or `https` and be at most 500 characters long. An absent `enabled` is taken as `true` on creation and update. When `events` is omitted the existing flags are preserved; when `events` is `{}` the flags are removed. Unknown fields in `events` are rejected.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Mapa de eventos")
+	writeLine(&buffer, "## Event map")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "| Flag | Evento externo | Descrição |")
+	writeLine(&buffer, "| Flag | External event | Description |")
 	writeLine(&buffer, "| --- | --- | --- |")
 	for _, event := range doc.Events {
 		writeLine(&buffer, "| `%s` | `%s` | %s |", event.Flag, event.Name, escapeTable(event.Description))
 	}
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Headers HTTP")
+	writeLine(&buffer, "## HTTP headers")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "| Header | Exemplo | Descrição |")
+	writeLine(&buffer, "| Header | Example | Description |")
 	writeLine(&buffer, "| --- | --- | --- |")
 	for _, header := range doc.Headers {
 		writeLine(&buffer, "| `%s` | `%s` | %s |", header.Name, escapeCode(header.Value), escapeTable(header.Description))
 	}
 	writeLine(&buffer, "")
-	writeLine(&buffer, "Exemplo de requisição recebida pelo consumidor:")
+	writeLine(&buffer, "An example of the request the consumer receives:")
 	writeLine(&buffer, "")
 	writeLine(&buffer, "```http")
 	writeLine(&buffer, "POST /webhooks/beplus HTTP/1.1")
@@ -139,13 +139,13 @@ func Markdown(doc Document) (string, error) {
 	writeLine(&buffer, "X-Arandu-Signature: sha256=<hex>")
 	writeLine(&buffer, "```")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "`x-owner-jid` pode ser uma string vazia quando a instância ainda não estiver conectada ou quando o proprietário não estiver salvo no snapshot usado pelo dispatcher.")
+	writeLine(&buffer, "`x-owner-jid` can be an empty string when the instance is not connected yet, or when the owner is not stored in the snapshot the dispatcher used.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Envelope padrão")
+	writeLine(&buffer, "## Standard envelope")
 	writeLine(&buffer, "")
 	if err := writeJSONBlock(&buffer, map[string]any{
-		"event":     "nome.do.evento",
+		"event":     "event.name",
 		"instance":  sampleInstance(false),
 		"data":      map[string]any{},
 		"timestamp": "2026-07-04T18:00:00Z",
@@ -153,10 +153,10 @@ func Markdown(doc Document) (string, error) {
 		return "", err
 	}
 	writeLine(&buffer, "")
-	writeLine(&buffer, "`event` é o nome externo do evento. `instance` contém o snapshot mínimo da instância responsável pelo evento. `data` contém os dados específicos de cada evento e pode ser objeto ou array. `timestamp` é gerado quando o envelope é criado, em RFC3339 UTC.")
+	writeLine(&buffer, "`event` is the external event name. `instance` holds the minimal snapshot of the instance responsible for the event. `data` holds the event-specific payload and can be an object or an array. `timestamp` is generated when the envelope is built, in RFC3339 UTC.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Estrutura da instância")
+	writeLine(&buffer, "## Instance structure")
 	writeLine(&buffer, "")
 	if err := writeJSONBlock(&buffer, map[string]any{
 		"id":                 1,
@@ -168,10 +168,10 @@ func Markdown(doc Document) (string, error) {
 		return "", err
 	}
 	writeLine(&buffer, "")
-	writeLine(&buffer, "`id` é o identificador numérico interno da instância. `name` é o nome usado nas rotas. `connectionStatus` usa os valores persistidos da conexão, como `offline`, `connecting`, `qr_code`, `pairing_code`, `pairing`, `online`, `reconnecting`, `disconnected`, `connection_timeout`, `logged_out`, `session_missing`, `stream_replaced`, `keepalive_timeout`, `client_outdated`, `temporary_ban` e `connection_error`. `ownerJid` é `string` ou `null` no body; no header `x-owner-jid`, o valor nulo vira string vazia. `externalAttributes` sempre é um objeto JSON; valores ausentes, `null` ou inválidos são serializados como `{}`.")
+	writeLine(&buffer, "`id` is the internal numeric identifier of the instance. `name` is the name used in the routes. `connectionStatus` carries the persisted connection values, such as `offline`, `connecting`, `qr_code`, `pairing_code`, `pairing`, `online`, `reconnecting`, `disconnected`, `connection_timeout`, `logged_out`, `session_missing`, `stream_replaced`, `keepalive_timeout`, `client_outdated`, `temporary_ban` and `connection_error`. `ownerJid` is a `string` or `null` in the body; in the `x-owner-jid` header, a null value becomes an empty string. `externalAttributes` is always a JSON object; absent, `null` or invalid values are serialized as `{}`.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Entrega e tratamento de erros")
+	writeLine(&buffer, "## Delivery and error handling")
 	writeLine(&buffer, "")
 	if err := writeJSONBlock(&buffer, map[string]any{
 		"delivery": map[string]any{
@@ -200,13 +200,13 @@ func Markdown(doc Document) (string, error) {
 	for _, item := range doc.Security {
 		writeLine(&buffer, "- %s", item)
 	}
-	writeLine(&buffer, "- A criação do snapshot e a inserção do job compartilham `data.Transaction`: ambos fazem commit ou ambos fazem rollback.")
-	writeLine(&buffer, "- Uma entrega concluída mantém apenas o tombstone necessário para idempotência; URL, body, headers e resposta são apagados imediatamente.")
-	writeLine(&buffer, "- Snapshots de qualquer estado expiram após `Config.Webhooks.Retention`; jobs órfãos terminam como no-op, portanto redrive manual só existe dentro dessa janela.")
-	writeLine(&buffer, "- `Start` e `Close` não criam nem encerram workers de webhook; o ciclo de vida da fila pertence à aplicação host.")
+	writeLine(&buffer, "- Creating the snapshot and inserting the job share a `data.Transaction`: either both commit or both roll back.")
+	writeLine(&buffer, "- A completed delivery keeps only the tombstone idempotency needs; the URL, body, headers and response are erased immediately.")
+	writeLine(&buffer, "- Snapshots in any state expire after `Config.Webhooks.Retention`; orphaned jobs end as a no-op, so a manual redrive only exists inside that window.")
+	writeLine(&buffer, "- `Start` and `Close` neither create nor stop webhook workers; the queue's lifecycle belongs to the host application.")
 	writeLine(&buffer, "")
 
-	writeLine(&buffer, "## Eventos")
+	writeLine(&buffer, "## Events")
 	writeLine(&buffer, "")
 	for _, event := range doc.Events {
 		if err := writeEvent(&buffer, event); err != nil {
@@ -214,9 +214,9 @@ func Markdown(doc Document) (string, error) {
 		}
 	}
 
-	writeLine(&buffer, "## Eventos não suportados ou ignorados")
+	writeLine(&buffer, "## Unsupported or ignored events")
 	writeLine(&buffer, "")
-	writeLine(&buffer, "| Evento interno | Status | Motivo |")
+	writeLine(&buffer, "| Internal event | Status | Reason |")
 	writeLine(&buffer, "| --- | --- | --- |")
 	for _, event := range doc.IgnoredEvents {
 		writeLine(&buffer, "| `%s` | `%s` | %s |", event.Name, event.Status, escapeTable(event.Description))
@@ -233,24 +233,24 @@ func writeEvent(buffer *bytes.Buffer, event EventDoc) error {
 	writeLine(buffer, "")
 	writeLine(buffer, "**Flag:** `%s`", event.Flag)
 	writeLine(buffer, "")
-	writeLine(buffer, "**Eventos internos:** `%s`", strings.Join(event.InternalEvents, "`, `"))
+	writeLine(buffer, "**Internal events:** `%s`", strings.Join(event.InternalEvents, "`, `"))
 	writeLine(buffer, "")
-	writeLine(buffer, "**Persistência:** %s", event.Persistence)
+	writeLine(buffer, "**Persistence:** %s", event.Persistence)
 	if event.RequiresPersistenceFlag != "" {
 		writeLine(buffer, "")
-		writeLine(buffer, "**Flag de persistência:** `%s`", event.RequiresPersistenceFlag)
+		writeLine(buffer, "**Persistence flag:** `%s`", event.RequiresPersistenceFlag)
 	}
 	writeLine(buffer, "")
-	writeLine(buffer, "**Tipo de `data`:** `%s`", event.DataType)
+	writeLine(buffer, "**Type of `data`:** `%s`", event.DataType)
 	writeLine(buffer, "")
-	writeLine(buffer, "**DTO/normalizador:** `%s`", event.DataSchema)
+	writeLine(buffer, "**DTO/normalizer:** `%s`", event.DataSchema)
 	writeLine(buffer, "")
-	writeLine(buffer, "**Campos dinâmicos:** %s", yesNo(event.DynamicFields))
+	writeLine(buffer, "**Dynamic fields:** %s", yesNo(event.DynamicFields))
 	writeLine(buffer, "")
-	writeLine(buffer, "**Implementado em:** `%s`", strings.Join(event.ImplementedIn, "`, `"))
+	writeLine(buffer, "**Implemented in:** `%s`", strings.Join(event.ImplementedIn, "`, `"))
 	writeLine(buffer, "")
 
-	writeLine(buffer, "#### Requisição")
+	writeLine(buffer, "#### Request")
 	writeLine(buffer, "")
 	writeLine(buffer, "```http")
 	writeLine(buffer, "POST /webhooks/beplus HTTP/1.1")
@@ -265,13 +265,13 @@ func writeEvent(buffer *bytes.Buffer, event EventDoc) error {
 	}
 	writeLine(buffer, "")
 
-	writeLine(buffer, "#### Campos de `data`")
+	writeLine(buffer, "#### Fields of `data`")
 	writeLine(buffer, "")
 	writeFieldBullets(buffer, event.Fields)
 	writeLine(buffer, "")
 
 	if len(event.PossibleValues) > 0 {
-		writeLine(buffer, "#### Valores possíveis")
+		writeLine(buffer, "#### Possible values")
 		writeLine(buffer, "")
 		for _, possible := range event.PossibleValues {
 			writeLine(buffer, "- `%s`: `%s`", possible.Field, strings.Join(possible.Values, "`, `"))
@@ -279,10 +279,10 @@ func writeEvent(buffer *bytes.Buffer, event EventDoc) error {
 		writeLine(buffer, "")
 	}
 
-	writeLine(buffer, "#### Observações")
+	writeLine(buffer, "#### Notes")
 	writeLine(buffer, "")
 	if len(event.Notes) == 0 {
-		writeLine(buffer, "- Sem observações adicionais.")
+		writeLine(buffer, "- No additional notes.")
 	} else {
 		for _, note := range event.Notes {
 			writeLine(buffer, "- %s", note)
@@ -294,17 +294,17 @@ func writeEvent(buffer *bytes.Buffer, event EventDoc) error {
 
 func writeFieldBullets(buffer *bytes.Buffer, fields []Field) {
 	for _, item := range fields {
-		requirement := "opcional"
+		requirement := "optional"
 		if item.Required {
-			requirement = "obrigatório"
+			requirement = "required"
 		}
-		nullability := "não aceita `null`"
+		nullability := "does not accept `null`"
 		if item.Nullable {
-			nullability = "aceita `null`"
+			nullability = "accepts `null`"
 		}
 		line := fmt.Sprintf("- `%s`: `%s`, %s, %s. %s", item.Name, item.Type, requirement, nullability, item.Description)
 		if len(item.Values) > 0 {
-			line += fmt.Sprintf(" Valores possíveis: `%s`.", strings.Join(item.Values, "`, `"))
+			line += fmt.Sprintf(" Possible values: `%s`.", strings.Join(item.Values, "`, `"))
 		}
 		writeLine(buffer, "%s", line)
 	}
@@ -374,9 +374,9 @@ func escapeCode(value string) string {
 
 func yesNo(value bool) string {
 	if value {
-		return "sim"
+		return "yes"
 	}
-	return "não"
+	return "no"
 }
 
 func ValidateDocument(doc Document) error {

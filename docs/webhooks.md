@@ -1,56 +1,56 @@
 # Webhooks
 
-Documentação técnica dos webhooks implementados no código executável atual.
+Technical documentation of the webhooks implemented in the executable code as it stands.
 
-## Sumário
-- [Visão geral](#visão-geral)
-- [Configuração](#configuração)
-- [Mapa de eventos](#mapa-de-eventos)
-- [Headers HTTP](#headers-http)
-- [Envelope padrão](#envelope-padrão)
-- [Estrutura da instância](#estrutura-da-instância)
-- [Entrega e tratamento de erros](#entrega-e-tratamento-de-erros)
-- [Eventos](#eventos)
-- [Eventos não suportados ou ignorados](#eventos-não-suportados-ou-ignorados)
+## Contents
+- [Overview](#overview)
+- [Configuration](#configuration)
+- [Event map](#event-map)
+- [HTTP headers](#http-headers)
+- [Standard envelope](#standard-envelope)
+- [Instance structure](#instance-structure)
+- [Delivery and error handling](#delivery-and-error-handling)
+- [Events](#events)
+- [Unsupported or ignored events](#unsupported-or-ignored-events)
 
-## Visão geral
+## Overview
 
-Webhooks são requisições HTTP `POST` assíncronas enviadas pela aplicação para uma URL configurada pelo consumidor. Cada entrega contém um envelope comum com o nome externo do evento, a instância que originou o evento, os dados específicos de `data` e o `timestamp` de criação do webhook.
+Webhooks are asynchronous HTTP `POST` requests the application sends to a URL the consumer configures. Every delivery carries a common envelope holding the external event name, the instance the event came from, the event-specific `data` and the `timestamp` the webhook was created at.
 
-Existem dois destinos possíveis. Com o `Config.Prefix` padrão, o webhook da instância é configurado por `PUT /whatsapp/instances/{instance}/webhook`; o dispatcher consulta essa configuração diretamente no banco e só cria entregas para eventos cujas flags estejam habilitadas em `events`. O webhook global é configurado por `Config.Webhooks.GlobalURL` e `Config.Webhooks.GlobalEnabled`; quando habilitado, recebe todos os eventos suportados, sem aplicar as flags da instância.
+There are two possible destinations. With the default `Config.Prefix`, the instance webhook is configured through `PUT /whatsapp/instances/{instance}/webhook`; the dispatcher reads that configuration straight from the database and creates deliveries only for events whose flags are enabled in `events`. The global webhook is configured through `Config.Webhooks.GlobalURL` and `Config.Webhooks.GlobalEnabled`; when enabled it receives every supported event, without applying the instance flags.
 
-Para cada destino habilitado, o módulo salva um snapshot imutável da URL, body e headers em `whatsapp_webhook_deliveries` e inclui, na mesma transação, um job que carrega somente o `deliveryId`. Se a instância não tiver webhook habilitado e o webhook global estiver desabilitado, o evento é descartado sem erro.
+For each enabled destination, the module saves an immutable snapshot of the URL, body and headers in `whatsapp_webhook_deliveries` and, in the same transaction, inserts a job carrying only the `deliveryId`. If the instance has no webhook enabled and the global webhook is disabled, the event is dropped without an error.
 
-As entregas usam a `DatabaseQueue` nativa do Hesape. A aplicação registra o handler com `Module.RegisterJobHandlers`, inclui `whatsapp.WebhookQueueName` entre as filas monitoradas por `jobs.NewModule` e executa `aru queue:work --queue=whatsapp-webhooks --workers=N`. Respostas HTTP `2xx` são sucesso; erros de rede, timeout e respostas não `2xx` retornam erro para retry com o mesmo `X-Arandu-Delivery-ID`. A ordem relativa entre eventos não é garantida.
+Deliveries use Hesape's native `DatabaseQueue`. The application registers the handler with `Module.RegisterJobHandlers`, includes `whatsapp.WebhookQueueName` among the queues `jobs.NewModule` watches, and runs `aru queue:work --queue=whatsapp-webhooks --workers=N`. HTTP `2xx` responses are a success; network errors, timeouts and non-`2xx` responses return an error so the job retries with the same `X-Arandu-Delivery-ID`. The relative order between events is not guaranteed.
 
-- Versão do documento: `1.2.0`.
-- Eventos oficiais documentados: `27`.
-- Pacote de constantes: `internal/database/types/webhook.go`.
+- Document version: `1.2.0`.
+- Official events documented: `27`.
+- Constants package: `internal/database/types/webhook.go`.
 - Dispatcher: `internal/webhook/manager.go`.
-- Versão auditada do whatsmeow: `v0.0.0-20260904121843-28bfe537ea6a`.
+- Audited whatsmeow version: `v0.0.0-20260904121843-28bfe537ea6a`.
 
-Os exemplos de eventos com campos estáticos são verificados com `hesape/jsonschema` v0.12. Nos eventos marcados com campos dinâmicos, a presença e o tipo raiz de `data` continuam verificados, mas o objeto não é fechado nem validado campo a campo: esse builder não representa objetos abertos, e fechar esses objetos rejeitaria propriedades legítimas vindas do whatsmeow.
+Examples of events with static fields are verified with `hesape/jsonschema` v0.12. For events marked as carrying dynamic fields, the presence and root type of `data` are still verified, but the object is neither closed nor validated field by field: that builder cannot express open objects, and closing these would reject legitimate properties coming from whatsmeow.
 
-## Configuração
+## Configuration
 
-### Configuração tipada
+### Typed configuration
 
-O módulo não lê variáveis de ambiente. A aplicação host fornece:
+The module reads no environment variables. The host application provides:
 
-| Campo | Tipo | Padrão | Descrição |
+| Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `Config.Webhooks.GlobalURL` | URL | vazio | URL HTTP ou HTTPS do webhook global. |
-| `Config.Webhooks.GlobalEnabled` | boolean | `false` | Habilita o webhook global; exige `GlobalURL`. |
-| `Config.Webhooks.SigningSecret` | string | vazio | Segredo HMAC com no mínimo 32 bytes; obrigatório antes de habilitar qualquer webhook. |
-| `Config.Webhooks.Retention` | duração | `720h` (30 dias) | Tempo máximo de retenção de snapshots, inclusive falhas; zero usa o padrão. |
-| `Config.Webhooks.Workers` | inteiro | ignorado | Obsoleto; configure `--workers=N` em `aru queue:work`. |
-| `Config.Webhooks.QueueSize` | inteiro | ignorado | Obsoleto; a fila nativa é durável no banco. |
+| `Config.Webhooks.GlobalURL` | URL | empty | HTTP or HTTPS URL of the global webhook. |
+| `Config.Webhooks.GlobalEnabled` | boolean | `false` | Enables the global webhook; requires `GlobalURL`. |
+| `Config.Webhooks.SigningSecret` | string | empty | HMAC secret of at least 32 bytes; required before enabling any webhook. |
+| `Config.Webhooks.Retention` | duration | `720h` (30 days) | Longest a snapshot is retained, failures included; zero uses the default. |
+| `Config.Webhooks.Workers` | integer | ignored | Obsolete; set `--workers=N` on `aru queue:work` instead. |
+| `Config.Webhooks.QueueSize` | integer | ignored | Obsolete; the native queue is durable in the database. |
 
-A aplicação host precisa aplicar também as migrations da `DatabaseQueue`, registrar o handler do módulo no worker e consumir a fila `whatsapp-webhooks`.
+The host application also has to apply the `DatabaseQueue` migrations, register the module's handler on the worker and consume the `whatsapp-webhooks` queue.
 
-### Webhook da instância
+### Instance webhook
 
-Configurar ou atualizar:
+To configure or update it:
 
 ```http
 PUT /whatsapp/instances/beplus/webhook HTTP/1.1
@@ -58,14 +58,14 @@ Cookie: arandu_session=<host-session>
 Content-Type: application/json
 ```
 
-Consultar:
+To read it:
 
 ```http
 GET /whatsapp/instances/beplus/webhook HTTP/1.1
 Cookie: arandu_session=<host-session>
 ```
 
-As duas rotas autenticam pela sessão Arandu e exigem Grants emitidos pela política para, respectivamente, `ActionWebhookSet` e `ActionWebhookView`. Respostas de configuração usam o envelope Arandu:
+Both routes authenticate through the Arandu session and require Grants issued by the policy for `ActionWebhookSet` and `ActionWebhookView` respectively. Configuration responses use the Arandu envelope:
 
 ```json
 {
@@ -105,56 +105,56 @@ As duas rotas autenticam pela sessão Arandu e exigem Grants emitidos pela polí
 }
 ```
 
-`url` precisa usar `http` ou `https` e ter no máximo 500 caracteres. `enabled` ausente assume `true` na criação/atualização. Quando `events` é omitido, as flags existentes são preservadas; quando `events` é `{}`, as flags são removidas. Campos desconhecidos em `events` são rejeitados.
+`url` has to use `http` or `https` and be at most 500 characters long. An absent `enabled` is taken as `true` on creation and update. When `events` is omitted the existing flags are preserved; when `events` is `{}` the flags are removed. Unknown fields in `events` are rejected.
 
-## Mapa de eventos
+## Event map
 
-| Flag | Evento externo | Descrição |
+| Flag | External event | Description |
 | --- | --- | --- |
-| `callUpsert` | `call.upsert` | Atualizacao de chamada de voz ou video. |
-| `chatsDeleted` | `chats.delete` | Exclusao ou limpeza de conversa. |
-| `chatsUpdated` | `chats.updated` | Atualizacao de propriedades de conversas. |
-| `connectionUpdated` | `connection.update` | Mudanca de estado da conexao da instancia. |
-| `contactsUpdated` | `contacts.update` | Atualizacao parcial em contato existente. |
-| `contactsUpsert` | `contacts.upsert` | Contato criado ou atualizado no cadastro local. |
-| `groupsParticipantsUpdated` | `groups.participants.update` | Mudanca de participantes em grupo. |
-| `groupsUpdated` | `groups.update` | Atualizacao parcial de metadados de grupo. |
-| `groupsUpsert` | `groups.upsert` | Grupo criado, descoberto ou sincronizado. |
-| `historySync` | `history.sync` | Sincronizacao de historico recebida do WhatsApp. |
-| `identityUpdated` | `identity.update` | Mudanca de identidade criptografica de um contato. |
-| `labelsAssociation` | `labels.association` | Associacao ou remocao de label em chat ou mensagem. |
-| `labelsEdit` | `labels.edit` | Criacao, alteracao ou remocao de label. |
-| `mediaRetry` | `media.retry` | Resultado ou erro relacionado a tentativa de retry de midia. |
-| `messagesDeleted` | `messages.delete` | Mensagem removida localmente pelo evento DeleteForMe. |
-| `messagesStarred` | `messages.star` | Marcacao ou desmarcacao de estrela em mensagem. |
-| `messagesUndecryptable` | `messages.undecryptable` | Mensagem recebida sem possibilidade de descriptografia. |
-| `messagesUpdated` | `messages.update` | Atualizacao de recibo/status de uma mensagem ja conhecida. |
-| `messagesUpsert` | `messages.upsert` | Mensagem recebida e persistida pela aplicacao. |
-| `newsLetter` | `news.letter` | Eventos relacionados a newsletters/canais. |
-| `presenceUpdated` | `presence.updated` | Atualizacao de presenca de usuario ou presenca em chat. |
-| `profilePictureUpdated` | `profile.picture.update` | Atualizacao de foto de perfil da propria instancia ou de outro JID. |
-| `qrcodeUpdated` | `qrcode.updated` | Novo QR Code disponivel para pareamento da instancia. |
-| `sendMessage` | `send.message` | Mensagem enviada pela API apos envio e persistencia bem-sucedidos. |
-| `settingsUpdated` | `settings.update` | Atualizacao de configuracoes do usuario/instancia. |
-| `statusInstance` | `status.instance` | Eventos de estado operacional ou avisos da instancia. |
-| `userAboutUpdated` | `user.about.update` | Atualizacao do recado/about de um usuario. |
+| `callUpsert` | `call.upsert` | A voice or video call was updated. |
+| `chatsDeleted` | `chats.delete` | A chat was deleted or cleared. |
+| `chatsUpdated` | `chats.updated` | Chat properties were updated. |
+| `connectionUpdated` | `connection.update` | The instance connection state changed. |
+| `contactsUpdated` | `contacts.update` | An existing contact was partially updated. |
+| `contactsUpsert` | `contacts.upsert` | A contact was created or updated in the local records. |
+| `groupsParticipantsUpdated` | `groups.participants.update` | Group participants changed. |
+| `groupsUpdated` | `groups.update` | Group metadata was partially updated. |
+| `groupsUpsert` | `groups.upsert` | A group was created, discovered or synchronized. |
+| `historySync` | `history.sync` | A history synchronization was received from WhatsApp. |
+| `identityUpdated` | `identity.update` | A contact's cryptographic identity changed. |
+| `labelsAssociation` | `labels.association` | A label was associated with or removed from a chat or message. |
+| `labelsEdit` | `labels.edit` | A label was created, changed or removed. |
+| `mediaRetry` | `media.retry` | Result or error of a media retry attempt. |
+| `messagesDeleted` | `messages.delete` | A message was removed locally by the DeleteForMe event. |
+| `messagesStarred` | `messages.star` | A message was starred or unstarred. |
+| `messagesUndecryptable` | `messages.undecryptable` | A message received that could not be decrypted. |
+| `messagesUpdated` | `messages.update` | The receipt or status of an already known message was updated. |
+| `messagesUpsert` | `messages.upsert` | A message received and persisted by the application. |
+| `newsLetter` | `news.letter` | Events related to newsletters and channels. |
+| `presenceUpdated` | `presence.updated` | User presence or chat presence was updated. |
+| `profilePictureUpdated` | `profile.picture.update` | The profile picture of the instance itself or of another JID was updated. |
+| `qrcodeUpdated` | `qrcode.updated` | A new QR code is available for pairing the instance. |
+| `sendMessage` | `send.message` | A message sent through the API, after a successful send and persistence. |
+| `settingsUpdated` | `settings.update` | User or instance settings were updated. |
+| `statusInstance` | `status.instance` | Operational state events or warnings from the instance. |
+| `userAboutUpdated` | `user.about.update` | A user's about text was updated. |
 
-## Headers HTTP
+## HTTP headers
 
-| Header | Exemplo | Descrição |
+| Header | Example | Description |
 | --- | --- | --- |
-| `Content-Type` | `application/json` | Formato do payload. |
-| `User-Agent` | `Arandu-WhatsApp/1.0` | Identifica o emissor do webhook. |
-| `x-request-id` | `UUID ou request id do contexto` | Id de rastreio da entrega; nao e uma chave de idempotencia garantida. |
-| `x-owner-jid` | `JID do owner ou string vazia` | Owner da instancia quando disponivel. |
-| `x-instance-name` | `Nome da instancia` | Nome publico da instancia. |
-| `x-instance-id` | `1` | Identificador numerico interno da instancia. |
-| `x-webhook-event` | `Nome externo do evento` | Mesmo valor do campo event no envelope. |
-| `X-Arandu-Delivery-ID` | `UUID da entrega` | Chave estavel entre retries; use-a para deduplicacao idempotente. |
-| `X-Arandu-Timestamp` | `Unix timestamp` | Instante assinado da tentativa HTTP; e renovado entre retries. |
-| `X-Arandu-Signature` | `sha256=<hex>` | HMAC-SHA256 de timestamp.deliveryId.body usando Config.Webhooks.SigningSecret. |
+| `Content-Type` | `application/json` | Payload format. |
+| `User-Agent` | `Arandu-WhatsApp/1.0` | Identifies the sender of the webhook. |
+| `x-request-id` | `UUID or request id from the context` | Tracing id for the delivery; it is not a guaranteed idempotency key. |
+| `x-owner-jid` | `Owner JID or an empty string` | Owner of the instance when available. |
+| `x-instance-name` | `Instance name` | Public name of the instance. |
+| `x-instance-id` | `1` | Internal numeric identifier of the instance. |
+| `x-webhook-event` | `External event name` | The same value as the event field in the envelope. |
+| `X-Arandu-Delivery-ID` | `Delivery UUID` | Stable key across retries; use it for idempotent deduplication. |
+| `X-Arandu-Timestamp` | `Unix timestamp` | Signed instant of the HTTP attempt; it is renewed between retries. |
+| `X-Arandu-Signature` | `sha256=<hex>` | HMAC-SHA256 of timestamp.deliveryId.body using Config.Webhooks.SigningSecret. |
 
-Exemplo de requisição recebida pelo consumidor:
+An example of the request the consumer receives:
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -171,15 +171,15 @@ X-Arandu-Timestamp: 1785876000
 X-Arandu-Signature: sha256=<hex>
 ```
 
-`x-owner-jid` pode ser uma string vazia quando a instância ainda não estiver conectada ou quando o proprietário não estiver salvo no snapshot usado pelo dispatcher.
+`x-owner-jid` can be an empty string when the instance is not connected yet, or when the owner is not stored in the snapshot the dispatcher used.
 
-## Envelope padrão
+## Standard envelope
 
 
 ```json
 {
   "data": {},
-  "event": "nome.do.evento",
+  "event": "event.name",
   "instance": {
     "connectionStatus": "online",
     "externalAttributes": {},
@@ -191,9 +191,9 @@ X-Arandu-Signature: sha256=<hex>
 }
 ```
 
-`event` é o nome externo do evento. `instance` contém o snapshot mínimo da instância responsável pelo evento. `data` contém os dados específicos de cada evento e pode ser objeto ou array. `timestamp` é gerado quando o envelope é criado, em RFC3339 UTC.
+`event` is the external event name. `instance` holds the minimal snapshot of the instance responsible for the event. `data` holds the event-specific payload and can be an object or an array. `timestamp` is generated when the envelope is built, in RFC3339 UTC.
 
-## Estrutura da instância
+## Instance structure
 
 
 ```json
@@ -206,9 +206,9 @@ X-Arandu-Signature: sha256=<hex>
 }
 ```
 
-`id` é o identificador numérico interno da instância. `name` é o nome usado nas rotas. `connectionStatus` usa os valores persistidos da conexão, como `offline`, `connecting`, `qr_code`, `pairing_code`, `pairing`, `online`, `reconnecting`, `disconnected`, `connection_timeout`, `logged_out`, `session_missing`, `stream_replaced`, `keepalive_timeout`, `client_outdated`, `temporary_ban` e `connection_error`. `ownerJid` é `string` ou `null` no body; no header `x-owner-jid`, o valor nulo vira string vazia. `externalAttributes` sempre é um objeto JSON; valores ausentes, `null` ou inválidos são serializados como `{}`.
+`id` is the internal numeric identifier of the instance. `name` is the name used in the routes. `connectionStatus` carries the persisted connection values, such as `offline`, `connecting`, `qr_code`, `pairing_code`, `pairing`, `online`, `reconnecting`, `disconnected`, `connection_timeout`, `logged_out`, `session_missing`, `stream_replaced`, `keepalive_timeout`, `client_outdated`, `temporary_ban` and `connection_error`. `ownerJid` is a `string` or `null` in the body; in the `x-owner-jid` header, a null value becomes an empty string. `externalAttributes` is always a JSON object; absent, `null` or invalid values are serialized as `{}`.
 
-## Entrega e tratamento de erros
+## Delivery and error handling
 
 
 ```json
@@ -237,44 +237,44 @@ X-Arandu-Signature: sha256=<hex>
 }
 ```
 
-- Somente respostas HTTP 2xx sao consideradas sucesso.
-- Falhas de rede, timeout e respostas nao 2xx persistem status failed e retornam erro para a fila nativa.
-- O job permite cinco tentativas com backoff; depois disso, a fila nativa o estaciona para inspecao.
-- Uma entrega ja marcada como delivered e concluida sem novo POST quando o mesmo job reaparece.
-- Um job cujo snapshot expirou ou foi removido com a instancia termina de forma idempotente, sem retry inutil.
-- A fila de entrega e duravel e processada pelos workers nativos da aplicacao host.
-- A ordem relativa entre eventos nao e garantida entre instancias nem entre eventos diferentes da mesma instancia.
-- Alguns eventos dependem de persistencia previa. Quando a persistencia falha, o evento pode nao ser emitido.
-- Toda entrega habilitada exige Config.Webhooks.SigningSecret com pelo menos 32 bytes e inclui HMAC-SHA256 verificavel pelo destino.
-- A assinatura usa os bytes exatos de X-Arandu-Timestamp + ponto + X-Arandu-Delivery-ID + ponto + body; compare-a em tempo constante.
-- Use HTTPS e rejeite timestamps fora da janela aceita antes de processar o evento.
-- O x-request-id serve para rastreio e correlacao; X-Arandu-Delivery-ID e a chave estavel para deduplicacao entre retries.
-- A criação do snapshot e a inserção do job compartilham `data.Transaction`: ambos fazem commit ou ambos fazem rollback.
-- Uma entrega concluída mantém apenas o tombstone necessário para idempotência; URL, body, headers e resposta são apagados imediatamente.
-- Snapshots de qualquer estado expiram após `Config.Webhooks.Retention`; jobs órfãos terminam como no-op, portanto redrive manual só existe dentro dessa janela.
-- `Start` e `Close` não criam nem encerram workers de webhook; o ciclo de vida da fila pertence à aplicação host.
+- Only HTTP 2xx responses count as a success.
+- Network failures, timeouts and non-2xx responses persist a failed status and return an error to the native queue.
+- The job allows five attempts with backoff; after that the native queue parks it for inspection.
+- A delivery already marked as delivered is completed without a new POST when the same job reappears.
+- A job whose snapshot expired or was removed with the instance finishes idempotently, without a pointless retry.
+- The delivery queue is durable and processed by the host application's native workers.
+- The relative order between events is guaranteed neither across instances nor across different events of the same instance.
+- Some events depend on prior persistence. When persistence fails, the event may not be emitted.
+- Every enabled delivery requires a Config.Webhooks.SigningSecret of at least 32 bytes and carries an HMAC-SHA256 the destination can verify.
+- The signature covers the exact bytes of X-Arandu-Timestamp + dot + X-Arandu-Delivery-ID + dot + body; compare it in constant time.
+- Use HTTPS and reject timestamps outside the accepted window before processing the event.
+- x-request-id is for tracing and correlation; X-Arandu-Delivery-ID is the stable key for deduplication across retries.
+- Creating the snapshot and inserting the job share a `data.Transaction`: either both commit or both roll back.
+- A completed delivery keeps only the tombstone idempotency needs; the URL, body, headers and response are erased immediately.
+- Snapshots in any state expire after `Config.Webhooks.Retention`; orphaned jobs end as a no-op, so a manual redrive only exists inside that window.
+- `Start` and `Close` neither create nor stop webhook workers; the queue's lifecycle belongs to the host application.
 
-## Eventos
+## Events
 
 ### `call.upsert`
 
-Atualizacao de chamada de voz ou video.
+A voice or video call was updated.
 
 **Flag:** `callUpsert`
 
-**Eventos internos:** `*events.CallOffer`, `*events.CallAccept`, `*events.CallOfferNotice`, `*events.CallPreAccept`, `*events.CallTransport`, `*events.CallTerminate`, `*events.CallReject`, `*events.CallRelayLatency`, `*events.UnknownCallEvent`
+**Internal events:** `*events.CallOffer`, `*events.CallAccept`, `*events.CallOfferNotice`, `*events.CallPreAccept`, `*events.CallTransport`, `*events.CallTerminate`, `*events.CallReject`, `*events.CallRelayLatency`, `*events.UnknownCallEvent`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `CallUpsertWebhookData`
+**DTO/normalizer:** `CallUpsertWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -311,47 +311,47 @@ x-webhook-event: call.upsert
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `chatId`: `string`, obrigatório, não aceita `null`. JID do chat da chamada.
-- `from`: `string`, obrigatório, não aceita `null`. JID de origem.
-- `callerPn`: `string | null`, obrigatório, aceita `null`. Phone number do chamador quando disponivel.
-- `isGroup`: `boolean | null`, obrigatório, aceita `null`. Indica chamada em grupo quando o normalizador consegue inferir.
-- `groupJid`: `string | null`, obrigatório, aceita `null`. JID do grupo quando disponivel.
-- `id`: `string`, obrigatório, não aceita `null`. ID da chamada.
-- `date`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 da chamada/processamento.
-- `isVideo`: `boolean | null`, obrigatório, aceita `null`. Indica chamada de video quando o normalizador consegue inferir.
-- `status`: `string`, obrigatório, não aceita `null`. Status normalizado da chamada. Valores possíveis: `offer`, `ringing`, `preaccept`, `transport`, `relaylatency`, `timeout`, `reject`, `accept`, `terminate`, `unknown`.
-- `offline`: `boolean`, obrigatório, não aceita `null`. Indica se o evento veio como offline.
-- `latencyMs`: `number | null`, obrigatório, aceita `null`. Latencia em milissegundos quando reportada.
+- `chatId`: `string`, required, does not accept `null`. Chat JID of the call.
+- `from`: `string`, required, does not accept `null`. Source JID.
+- `callerPn`: `string | null`, required, accepts `null`. Phone number of the caller when available.
+- `isGroup`: `boolean | null`, required, accepts `null`. Whether it is a group call, when the normalizer can infer it.
+- `groupJid`: `string | null`, required, accepts `null`. Group JID when available.
+- `id`: `string`, required, does not accept `null`. Call id.
+- `date`: `string`, required, does not accept `null`. RFC3339 timestamp of the call or of the processing.
+- `isVideo`: `boolean | null`, required, accepts `null`. Whether it is a video call, when the normalizer can infer it.
+- `status`: `string`, required, does not accept `null`. Normalized call status. Possible values: `offer`, `ringing`, `preaccept`, `transport`, `relaylatency`, `timeout`, `reject`, `accept`, `terminate`, `unknown`.
+- `offline`: `boolean`, required, does not accept `null`. Whether the event arrived as offline.
+- `latencyMs`: `number | null`, required, accepts `null`. Latency in milliseconds when reported.
 
-#### Valores possíveis
+#### Possible values
 
 - `status`: `offer`, `ringing`, `preaccept`, `transport`, `relaylatency`, `timeout`, `reject`, `accept`, `terminate`, `unknown`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `chats.delete`
 
-Exclusao ou limpeza de conversa.
+A chat was deleted or cleared.
 
 **Flag:** `chatsDeleted`
 
-**Eventos internos:** `*events.DeleteChat`
+**Internal events:** `*events.DeleteChat`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `ChatDeletedWebhookData`
+**DTO/normalizer:** `ChatDeletedWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -380,36 +380,36 @@ x-webhook-event: chats.delete
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `chatJid`: `string`, obrigatório, não aceita `null`. JID da conversa.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 do processamento.
-- `deleteMedia`: `boolean`, opcional, não aceita `null`. Indica remocao de midia local quando presente.
-- `additionalProperties`: `object`, opcional, não aceita `null`. Campos achatados da acao original.
+- `chatJid`: `string`, required, does not accept `null`. Chat JID.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 timestamp of the processing.
+- `deleteMedia`: `boolean`, optional, does not accept `null`. Whether local media was removed, when present.
+- `additionalProperties`: `object`, optional, does not accept `null`. Flattened fields of the original action.
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `chats.updated`
 
-Atualizacao de propriedades de conversas.
+Chat properties were updated.
 
 **Flag:** `chatsUpdated`
 
-**Eventos internos:** `*events.Blocklist`, `*events.BlocklistChange`, `*events.Archive`, `*events.UnarchiveChatsSetting`, `*events.ClearChat`, `*events.Pin`, `*events.Mute`, `*events.MarkChatAsRead`
+**Internal events:** `*events.Blocklist`, `*events.BlocklistChange`, `*events.Archive`, `*events.UnarchiveChatsSetting`, `*events.ClearChat`, `*events.Pin`, `*events.Mute`, `*events.MarkChatAsRead`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `ChatUpdatedWebhookData`
+**DTO/normalizer:** `ChatUpdatedWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -439,41 +439,41 @@ x-webhook-event: chats.updated
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Subtipo da atualizacao de chat. Valores possíveis: `blocklist`, `blocklist.change`, `archive`, `unarchive.setting`, `clear`, `pin`, `mute`, `mark.read`.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
-- `chatJid`: `string`, opcional, não aceita `null`. JID da conversa quando o subtipo tem conversa especifica.
-- `fromFullSync`: `boolean`, opcional, não aceita `null`. Indica se veio de sincronizacao completa quando disponivel.
-- `additionalProperties`: `object`, opcional, não aceita `null`. Campos achatados do evento original do whatsmeow.
+- `type`: `string`, required, does not accept `null`. Subtype of the chat update. Possible values: `blocklist`, `blocklist.change`, `archive`, `unarchive.setting`, `clear`, `pin`, `mute`, `mark.read`.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
+- `chatJid`: `string`, optional, does not accept `null`. Chat JID when the subtype has a specific chat.
+- `fromFullSync`: `boolean`, optional, does not accept `null`. Whether it came from a full synchronization, when available.
+- `additionalProperties`: `object`, optional, does not accept `null`. Flattened fields of the original whatsmeow event.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `blocklist`, `blocklist.change`, `archive`, `unarchive.setting`, `clear`, `pin`, `mute`, `mark.read`
 
-#### Observações
+#### Notes
 
-- Eventos UserStatusMute sao documentados em settings.update, porque o registro atual os roteia para esse evento externo.
+- UserStatusMute events are documented under settings.update, because the current registration routes them to that external event.
 
 ### `connection.update`
 
-Mudanca de estado da conexao da instancia.
+The instance connection state changed.
 
 **Flag:** `connectionUpdated`
 
-**Eventos internos:** `*events.PairSuccess`, `*events.PairError`, `*events.Connected`, `*events.Disconnected`, `*events.LoggedOut`, `*events.StreamReplaced`, `*events.KeepAliveTimeout`, `*events.KeepAliveRestored`, `*events.ConnectFailure`, `*events.ManualLoginReconnect`, `*events.StreamError`, `*events.CATRefreshError`
+**Internal events:** `*events.PairSuccess`, `*events.PairError`, `*events.Connected`, `*events.Disconnected`, `*events.LoggedOut`, `*events.StreamReplaced`, `*events.KeepAliveTimeout`, `*events.KeepAliveRestored`, `*events.ConnectFailure`, `*events.ManualLoginReconnect`, `*events.StreamError`, `*events.CATRefreshError`
 
-**Persistência:** O status da instancia e atualizado pelos fluxos de conexao antes ou junto da entrega conforme o subtipo.
+**Persistence:** The instance status is updated by the connection flows before or alongside the delivery, depending on the subtype.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `ConnectionUpdateWebhookData`
+**DTO/normalizer:** `ConnectionUpdateWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -502,44 +502,44 @@ x-webhook-event: connection.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Subtipo normalizado da conexao. Valores possíveis: `pair.success`, `connected`, `disconnected`, `logged.out`, `stream.replaced`, `keepalive.timeout`, `keepalive.restored`, `connect.failure`, `manual.reconnect`, `pair.error`, `stream.error`, `cat.refresh.error`.
-- `connection`: `string`, obrigatório, não aceita `null`. Estado externo da conexao. Valores possíveis: `connecting`, `open`, `close`, `replaced`, `timeout`.
-- `statusReason`: `number`, opcional, não aceita `null`. Codigo numerico de motivo quando diferente de zero; omitido quando zero.
-- `lastConnection`: `string`, opcional, não aceita `null`. Timestamp RFC3339 UTC quando informado; omitido quando ausente.
-- `message`: `string`, opcional, não aceita `null`. Mensagem tecnica quando informada; omitida quando vazia.
+- `type`: `string`, required, does not accept `null`. Normalized connection subtype. Possible values: `pair.success`, `connected`, `disconnected`, `logged.out`, `stream.replaced`, `keepalive.timeout`, `keepalive.restored`, `connect.failure`, `manual.reconnect`, `pair.error`, `stream.error`, `cat.refresh.error`.
+- `connection`: `string`, required, does not accept `null`. External connection state. Possible values: `connecting`, `open`, `close`, `replaced`, `timeout`.
+- `statusReason`: `number`, optional, does not accept `null`. Numeric reason code when non-zero; omitted when zero.
+- `lastConnection`: `string`, optional, does not accept `null`. RFC3339 UTC timestamp when reported; omitted when absent.
+- `message`: `string`, optional, does not accept `null`. Technical message when reported; omitted when empty.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `pair.success`, `connected`, `disconnected`, `logged.out`, `stream.replaced`, `keepalive.timeout`, `keepalive.restored`, `connect.failure`, `manual.reconnect`, `pair.error`, `stream.error`, `cat.refresh.error`
 - `connection`: `connecting`, `open`, `close`, `replaced`, `timeout`
 
-#### Observações
+#### Notes
 
-- `statusReason`, `lastConnection` e `message` usam `omitempty`; quando estao zerados ou vazios, nao aparecem no JSON.
+- `statusReason`, `lastConnection` and `message` use `omitempty`; when they are zero or empty they do not appear in the JSON.
 
 ### `contacts.update`
 
-Atualizacao parcial em contato existente.
+An existing contact was partially updated.
 
 **Flag:** `contactsUpdated`
 
-**Eventos internos:** `*events.PushName`, `*events.BusinessName`
+**Internal events:** `*events.PushName`, `*events.BusinessName`
 
-**Persistência:** Requer Config.Persistence.Contacts=true. O contato e atualizado antes da entrega quando aplicavel.
+**Persistence:** Requires Config.Persistence.Contacts=true. The contact is updated before delivery where applicable.
 
-**Flag de persistência:** `Config.Persistence.Contacts`
+**Persistence flag:** `Config.Persistence.Contacts`
 
-**Tipo de `data`:** `array`
+**Type of `data`:** `array`
 
-**DTO/normalizador:** `ContactUpdateWebhookData[]`
+**DTO/normalizer:** `ContactUpdateWebhookData[]`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -574,46 +574,46 @@ x-webhook-event: contacts.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `number`, obrigatório, não aceita `null`. ID interno do contato persistido.
-- `remoteJid`: `string`, obrigatório, não aceita `null`. JID remoto do contato.
-- `lid`: `string | null`, obrigatório, aceita `null`. LID do contato quando conhecido.
-- `pushName`: `string | null`, opcional, aceita `null`. Push name atualizado quando presente.
-- `businessName`: `string | null`, opcional, aceita `null`. Nome comercial atualizado quando presente.
-- `action`: `string`, obrigatório, não aceita `null`. Acao executada. Valores possíveis: `updated`.
-- `source`: `string`, obrigatório, não aceita `null`. Origem da alteracao. Valores possíveis: `pushName`, `businessName`.
+- `id`: `number`, required, does not accept `null`. Internal id of the persisted contact.
+- `remoteJid`: `string`, required, does not accept `null`. Remote JID of the contact.
+- `lid`: `string | null`, required, accepts `null`. LID of the contact when known.
+- `pushName`: `string | null`, optional, accepts `null`. Updated push name when present.
+- `businessName`: `string | null`, optional, accepts `null`. Updated business name when present.
+- `action`: `string`, required, does not accept `null`. Acao executada. Possible values: `updated`.
+- `source`: `string`, required, does not accept `null`. Source of the change. Possible values: `pushName`, `businessName`.
 
-#### Valores possíveis
+#### Possible values
 
 - `action`: `updated`
 - `source`: `pushName`, `businessName`
 
-#### Observações
+#### Notes
 
-- O payload e array; o handler atual normalmente envia um item por entrega.
+- The payload is an array; the current handler normally sends one item per delivery.
 
 ### `contacts.upsert`
 
-Contato criado ou atualizado no cadastro local.
+A contact was created or updated in the local records.
 
 **Flag:** `contactsUpsert`
 
-**Eventos internos:** `*events.Contact`
+**Internal events:** `*events.Contact`
 
-**Persistência:** Requer Config.Persistence.Contacts=true. O contato e salvo antes da entrega.
+**Persistence:** Requires Config.Persistence.Contacts=true. The contact is stored before delivery.
 
-**Flag de persistência:** `Config.Persistence.Contacts`
+**Persistence flag:** `Config.Persistence.Contacts`
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `ContactUpsertWebhookData`
+**DTO/normalizer:** `ContactUpsertWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -645,42 +645,42 @@ x-webhook-event: contacts.upsert
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `number`, obrigatório, não aceita `null`. ID interno do contato persistido.
-- `remoteJid`: `string`, obrigatório, não aceita `null`. JID remoto do contato.
-- `lid`: `string | null`, obrigatório, aceita `null`. LID do contato quando conhecido.
-- `pushName`: `string | null`, obrigatório, aceita `null`. Push name salvo para o contato.
-- `profilePicUrl`: `string | null`, obrigatório, aceita `null`. URL de foto do perfil quando conhecida.
-- `action`: `string`, obrigatório, não aceita `null`. Acao executada. Valores possíveis: `upserted`.
+- `id`: `number`, required, does not accept `null`. Internal id of the persisted contact.
+- `remoteJid`: `string`, required, does not accept `null`. Remote JID of the contact.
+- `lid`: `string | null`, required, accepts `null`. LID of the contact when known.
+- `pushName`: `string | null`, required, accepts `null`. Push name stored for the contact.
+- `profilePicUrl`: `string | null`, required, accepts `null`. Profile picture URL when known.
+- `action`: `string`, required, does not accept `null`. Acao executada. Possible values: `upserted`.
 
-#### Valores possíveis
+#### Possible values
 
 - `action`: `upserted`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `groups.participants.update`
 
-Mudanca de participantes em grupo.
+Group participants changed.
 
 **Flag:** `groupsParticipantsUpdated`
 
-**Eventos internos:** `*events.GroupInfo`
+**Internal events:** `*events.GroupInfo`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `GroupParticipantsUpdatedWebhookData`
+**DTO/normalizer:** `GroupParticipantsUpdatedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -718,41 +718,41 @@ x-webhook-event: groups.participants.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `string`, obrigatório, não aceita `null`. JID do grupo.
-- `author`: `string`, obrigatório, não aceita `null`. JID do autor da alteracao; string vazia quando ausente.
-- `authorPn`: `string`, opcional, não aceita `null`. Phone number do autor quando disponivel; omitido quando ausente.
-- `participants`: `GroupParticipantWebhookData[]`, obrigatório, não aceita `null`. Participantes afetados.
-- `action`: `string`, obrigatório, não aceita `null`. Acao aplicada. Valores possíveis: `add`, `remove`, `promote`, `demote`.
+- `id`: `string`, required, does not accept `null`. Group JID.
+- `author`: `string`, required, does not accept `null`. JID of the author of the change; empty string when absent.
+- `authorPn`: `string`, optional, does not accept `null`. Phone number of the author when available; omitted when absent.
+- `participants`: `GroupParticipantWebhookData[]`, required, does not accept `null`. Participantes afetados.
+- `action`: `string`, required, does not accept `null`. Acao aplicada. Possible values: `add`, `remove`, `promote`, `demote`.
 
-#### Valores possíveis
+#### Possible values
 
 - `action`: `add`, `remove`, `promote`, `demote`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `groups.update`
 
-Atualizacao parcial de metadados de grupo.
+Group metadata was partially updated.
 
 **Flag:** `groupsUpdated`
 
-**Eventos internos:** `*events.GroupInfo`
+**Internal events:** `*events.GroupInfo`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `array`
+**Type of `data`:** `array`
 
-**DTO/normalizador:** `GroupUpdateWebhookData[]`
+**DTO/normalizer:** `GroupUpdateWebhookData[]`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -769,7 +769,7 @@ x-webhook-event: groups.update
       "partial": {
         "announce": true,
         "id": "120363000000000000@g.us",
-        "subject": "Novo nome do grupo",
+        "subject": "New group name",
         "subjectTime": 1783188000
       }
     }
@@ -786,63 +786,63 @@ x-webhook-event: groups.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `partial`: `GroupPartialWebhookData`, obrigatório, não aceita `null`. Metadados parciais alterados no grupo.
-- `partial.notify`: `string`, opcional, não aceita `null`. Nome de notificacao do grupo quando informado.
-- `partial.addressingMode`: `string`, opcional, não aceita `null`. Modo de enderecamento do grupo quando informado.
-- `partial.owner`: `string`, opcional, não aceita `null`. JID do owner quando informado.
-- `partial.ownerPn`: `string`, opcional, não aceita `null`. Phone number do owner quando informado.
-- `partial.ownerUsername`: `string`, opcional, não aceita `null`. Username do owner quando informado.
-- `partial.ownerCountryCode`: `string`, opcional, não aceita `null`. Codigo de pais do owner quando informado.
-- `partial.subjectOwner`: `string`, opcional, não aceita `null`. JID de quem definiu o subject quando informado.
-- `partial.subjectOwnerPn`: `string`, opcional, não aceita `null`. Phone number de quem definiu o subject quando informado.
-- `partial.subjectOwnerUsername`: `string`, opcional, não aceita `null`. Username de quem definiu o subject quando informado.
-- `partial.subjectTime`: `number`, opcional, não aceita `null`. Timestamp Unix do subject quando informado.
-- `partial.creation`: `number`, opcional, não aceita `null`. Timestamp Unix de criacao quando informado.
-- `partial.desc`: `string`, opcional, não aceita `null`. Descricao do grupo quando informada.
-- `partial.descOwner`: `string`, opcional, não aceita `null`. JID de quem definiu a descricao quando informado.
-- `partial.descOwnerPn`: `string`, opcional, não aceita `null`. Phone number de quem definiu a descricao quando informado.
-- `partial.descOwnerUsername`: `string`, opcional, não aceita `null`. Username de quem definiu a descricao quando informado.
-- `partial.descId`: `string`, opcional, não aceita `null`. ID da descricao quando informado.
-- `partial.descTime`: `number`, opcional, não aceita `null`. Timestamp Unix da descricao quando informado.
-- `partial.linkedParent`: `string`, opcional, não aceita `null`. Grupo/comunidade pai quando informado.
-- `partial.restrict`: `boolean`, opcional, não aceita `null`. Restricao de edicao quando informada.
-- `partial.announce`: `boolean`, opcional, não aceita `null`. Modo anuncio quando informado.
-- `partial.memberAddMode`: `boolean`, opcional, não aceita `null`. Modo de adicao por membros quando informado.
-- `partial.joinApprovalMode`: `boolean`, opcional, não aceita `null`. Modo de aprovacao de entrada quando informado.
-- `partial.isCommunity`: `boolean`, opcional, não aceita `null`. Indica comunidade quando informado.
-- `partial.isCommunityAnnounce`: `boolean`, opcional, não aceita `null`. Indica grupo de anuncios da comunidade quando informado.
-- `partial.size`: `number`, opcional, não aceita `null`. Tamanho do grupo quando informado.
-- `partial.ephemeralDuration`: `number`, opcional, não aceita `null`. Duracao de mensagens temporarias em segundos quando informada.
-- `partial.inviteCode`: `string`, opcional, não aceita `null`. Codigo de convite quando informado.
-- `partial.author`: `string`, opcional, não aceita `null`. Autor da alteracao quando informado.
-- `partial.authorPn`: `string`, opcional, não aceita `null`. Phone number do autor quando informado.
-- `partial.authorUsername`: `string`, opcional, não aceita `null`. Username do autor quando informado.
+- `partial`: `GroupPartialWebhookData`, required, does not accept `null`. Partial metadata changed on the group.
+- `partial.notify`: `string`, optional, does not accept `null`. Notification name of the group when reported.
+- `partial.addressingMode`: `string`, optional, does not accept `null`. Addressing mode of the group when reported.
+- `partial.owner`: `string`, optional, does not accept `null`. Owner JID when reported.
+- `partial.ownerPn`: `string`, optional, does not accept `null`. Phone number of the owner when reported.
+- `partial.ownerUsername`: `string`, optional, does not accept `null`. Username of the owner when reported.
+- `partial.ownerCountryCode`: `string`, optional, does not accept `null`. Country code of the owner when reported.
+- `partial.subjectOwner`: `string`, optional, does not accept `null`. JID of whoever set the subject, when reported.
+- `partial.subjectOwnerPn`: `string`, optional, does not accept `null`. Phone number of whoever set the subject, when reported.
+- `partial.subjectOwnerUsername`: `string`, optional, does not accept `null`. Username of whoever set the subject, when reported.
+- `partial.subjectTime`: `number`, optional, does not accept `null`. Unix timestamp of the subject when reported.
+- `partial.creation`: `number`, optional, does not accept `null`. Unix timestamp of the creation when reported.
+- `partial.desc`: `string`, optional, does not accept `null`. Group description when reported.
+- `partial.descOwner`: `string`, optional, does not accept `null`. JID of whoever set the description, when reported.
+- `partial.descOwnerPn`: `string`, optional, does not accept `null`. Phone number of whoever set the description, when reported.
+- `partial.descOwnerUsername`: `string`, optional, does not accept `null`. Username of whoever set the description, when reported.
+- `partial.descId`: `string`, optional, does not accept `null`. Description id when reported.
+- `partial.descTime`: `number`, optional, does not accept `null`. Unix timestamp of the description when reported.
+- `partial.linkedParent`: `string`, optional, does not accept `null`. Parent group or community when reported.
+- `partial.restrict`: `boolean`, optional, does not accept `null`. Edit restriction when reported.
+- `partial.announce`: `boolean`, optional, does not accept `null`. Announcement mode when reported.
+- `partial.memberAddMode`: `boolean`, optional, does not accept `null`. Member-add mode when reported.
+- `partial.joinApprovalMode`: `boolean`, optional, does not accept `null`. Join-approval mode when reported.
+- `partial.isCommunity`: `boolean`, optional, does not accept `null`. Whether it is a community, when reported.
+- `partial.isCommunityAnnounce`: `boolean`, optional, does not accept `null`. Whether it is the community announcement group, when reported.
+- `partial.size`: `number`, optional, does not accept `null`. Group size when reported.
+- `partial.ephemeralDuration`: `number`, optional, does not accept `null`. Disappearing-message duration in seconds when reported.
+- `partial.inviteCode`: `string`, optional, does not accept `null`. Invite code when reported.
+- `partial.author`: `string`, optional, does not accept `null`. Author of the change when reported.
+- `partial.authorPn`: `string`, optional, does not accept `null`. Phone number of the author when reported.
+- `partial.authorUsername`: `string`, optional, does not accept `null`. Username of the author when reported.
 
-#### Observações
+#### Notes
 
-- O handler atual envia array com um item contendo partial.
+- The current handler sends an array holding one item that carries partial.
 
 ### `groups.upsert`
 
-Grupo criado, descoberto ou sincronizado.
+A group was created, discovered or synchronized.
 
 **Flag:** `groupsUpsert`
 
-**Eventos internos:** `*events.JoinedGroup`
+**Internal events:** `*events.JoinedGroup`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `array`
+**Type of `data`:** `array`
 
-**DTO/normalizador:** `GroupUpsertWebhookData[]`
+**DTO/normalizer:** `GroupUpsertWebhookData[]`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -870,7 +870,7 @@ x-webhook-event: groups.upsert
           "lid": "279847268053216@lid"
         }
       ],
-      "subject": "Grupo"
+      "subject": "Group"
     }
   ],
   "event": "groups.upsert",
@@ -885,65 +885,65 @@ x-webhook-event: groups.upsert
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `string`, obrigatório, não aceita `null`. JID do grupo.
-- `subject`: `string`, obrigatório, não aceita `null`. Nome do grupo.
-- `participants`: `GroupParticipantWebhookData[]`, obrigatório, não aceita `null`. Participantes conhecidos do grupo.
-- `notify`: `string`, opcional, não aceita `null`. Nome de notificacao do grupo quando informado.
-- `addressingMode`: `string`, opcional, não aceita `null`. Modo de enderecamento do grupo quando informado.
-- `owner`: `string`, opcional, não aceita `null`. JID do owner quando informado.
-- `ownerPn`: `string`, opcional, não aceita `null`. Phone number do owner quando informado.
-- `ownerUsername`: `string`, opcional, não aceita `null`. Username do owner quando informado.
-- `ownerCountryCode`: `string`, opcional, não aceita `null`. Codigo de pais do owner quando informado.
-- `subjectOwner`: `string`, opcional, não aceita `null`. JID de quem definiu o subject quando informado.
-- `subjectOwnerPn`: `string`, opcional, não aceita `null`. Phone number de quem definiu o subject quando informado.
-- `subjectOwnerUsername`: `string`, opcional, não aceita `null`. Username de quem definiu o subject quando informado.
-- `subjectTime`: `number`, opcional, não aceita `null`. Timestamp Unix do subject quando informado.
-- `creation`: `number`, opcional, não aceita `null`. Timestamp Unix de criacao quando informado.
-- `desc`: `string`, opcional, não aceita `null`. Descricao do grupo quando informada.
-- `descOwner`: `string`, opcional, não aceita `null`. JID de quem definiu a descricao quando informado.
-- `descOwnerPn`: `string`, opcional, não aceita `null`. Phone number de quem definiu a descricao quando informado.
-- `descOwnerUsername`: `string`, opcional, não aceita `null`. Username de quem definiu a descricao quando informado.
-- `descId`: `string`, opcional, não aceita `null`. ID da descricao quando informado.
-- `descTime`: `number`, opcional, não aceita `null`. Timestamp Unix da descricao quando informado.
-- `linkedParent`: `string`, opcional, não aceita `null`. Grupo/comunidade pai quando informado.
-- `restrict`: `boolean`, opcional, não aceita `null`. Restricao de edicao quando informada.
-- `announce`: `boolean`, opcional, não aceita `null`. Modo anuncio quando informado.
-- `memberAddMode`: `boolean`, opcional, não aceita `null`. Modo de adicao por membros quando informado.
-- `joinApprovalMode`: `boolean`, opcional, não aceita `null`. Modo de aprovacao de entrada quando informado.
-- `isCommunity`: `boolean`, opcional, não aceita `null`. Indica comunidade quando informado.
-- `isCommunityAnnounce`: `boolean`, opcional, não aceita `null`. Indica grupo de anuncios da comunidade quando informado.
-- `size`: `number`, opcional, não aceita `null`. Tamanho do grupo quando informado.
-- `ephemeralDuration`: `number`, opcional, não aceita `null`. Duracao de mensagens temporarias em segundos quando informada.
-- `inviteCode`: `string`, opcional, não aceita `null`. Codigo de convite quando informado.
-- `author`: `string`, opcional, não aceita `null`. Autor da alteracao quando informado.
-- `authorPn`: `string`, opcional, não aceita `null`. Phone number do autor quando informado.
-- `authorUsername`: `string`, opcional, não aceita `null`. Username do autor quando informado.
+- `id`: `string`, required, does not accept `null`. Group JID.
+- `subject`: `string`, required, does not accept `null`. Group name.
+- `participants`: `GroupParticipantWebhookData[]`, required, does not accept `null`. Known participants of the group.
+- `notify`: `string`, optional, does not accept `null`. Notification name of the group when reported.
+- `addressingMode`: `string`, optional, does not accept `null`. Addressing mode of the group when reported.
+- `owner`: `string`, optional, does not accept `null`. Owner JID when reported.
+- `ownerPn`: `string`, optional, does not accept `null`. Phone number of the owner when reported.
+- `ownerUsername`: `string`, optional, does not accept `null`. Username of the owner when reported.
+- `ownerCountryCode`: `string`, optional, does not accept `null`. Country code of the owner when reported.
+- `subjectOwner`: `string`, optional, does not accept `null`. JID of whoever set the subject, when reported.
+- `subjectOwnerPn`: `string`, optional, does not accept `null`. Phone number of whoever set the subject, when reported.
+- `subjectOwnerUsername`: `string`, optional, does not accept `null`. Username of whoever set the subject, when reported.
+- `subjectTime`: `number`, optional, does not accept `null`. Unix timestamp of the subject when reported.
+- `creation`: `number`, optional, does not accept `null`. Unix timestamp of the creation when reported.
+- `desc`: `string`, optional, does not accept `null`. Group description when reported.
+- `descOwner`: `string`, optional, does not accept `null`. JID of whoever set the description, when reported.
+- `descOwnerPn`: `string`, optional, does not accept `null`. Phone number of whoever set the description, when reported.
+- `descOwnerUsername`: `string`, optional, does not accept `null`. Username of whoever set the description, when reported.
+- `descId`: `string`, optional, does not accept `null`. Description id when reported.
+- `descTime`: `number`, optional, does not accept `null`. Unix timestamp of the description when reported.
+- `linkedParent`: `string`, optional, does not accept `null`. Parent group or community when reported.
+- `restrict`: `boolean`, optional, does not accept `null`. Edit restriction when reported.
+- `announce`: `boolean`, optional, does not accept `null`. Announcement mode when reported.
+- `memberAddMode`: `boolean`, optional, does not accept `null`. Member-add mode when reported.
+- `joinApprovalMode`: `boolean`, optional, does not accept `null`. Join-approval mode when reported.
+- `isCommunity`: `boolean`, optional, does not accept `null`. Whether it is a community, when reported.
+- `isCommunityAnnounce`: `boolean`, optional, does not accept `null`. Whether it is the community announcement group, when reported.
+- `size`: `number`, optional, does not accept `null`. Group size when reported.
+- `ephemeralDuration`: `number`, optional, does not accept `null`. Disappearing-message duration in seconds when reported.
+- `inviteCode`: `string`, optional, does not accept `null`. Invite code when reported.
+- `author`: `string`, optional, does not accept `null`. Author of the change when reported.
+- `authorPn`: `string`, optional, does not accept `null`. Phone number of the author when reported.
+- `authorUsername`: `string`, optional, does not accept `null`. Username of the author when reported.
 
-#### Observações
+#### Notes
 
-- O payload e array para compatibilidade com contratos de lista, mesmo quando uma entrega contem um grupo.
+- The payload is an array for compatibility with list contracts, even when a delivery carries a single group.
 
 ### `history.sync`
 
-Sincronizacao de historico recebida do WhatsApp.
+A history synchronization was received from WhatsApp.
 
 **Flag:** `historySync`
 
-**Eventos internos:** `*events.HistorySync`
+**Internal events:** `*events.HistorySync`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `HistorySyncWebhookData`
+**DTO/normalizer:** `HistorySyncWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -974,39 +974,39 @@ x-webhook-event: history.sync
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Tipo fixo do payload. Valores possíveis: `history.sync`.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
-- `data`: `object`, opcional, não aceita `null`. Conteudo normalizado do evento de historico quando disponivel.
+- `type`: `string`, required, does not accept `null`. Fixed payload type. Possible values: `history.sync`.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
+- `data`: `object`, optional, does not accept `null`. Normalized content of the history event when available.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `history.sync`
 
-#### Observações
+#### Notes
 
-- Payload dinamico porque o conteudo vem do proto de historico do whatsmeow.
+- Dynamic payload, because the content comes from whatsmeow's history proto.
 
 ### `identity.update`
 
-Mudanca de identidade criptografica de um contato.
+A contact's cryptographic identity changed.
 
 **Flag:** `identityUpdated`
 
-**Eventos internos:** `*events.IdentityChange`
+**Internal events:** `*events.IdentityChange`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `IdentityUpdatedWebhookData`
+**DTO/normalizer:** `IdentityUpdatedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1035,35 +1035,35 @@ x-webhook-event: identity.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `jid`: `string`, obrigatório, não aceita `null`. JID cuja identidade mudou.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
-- `implicit`: `boolean`, obrigatório, não aceita `null`. Indica mudanca implicita reportada pelo whatsmeow.
+- `jid`: `string`, required, does not accept `null`. JID cuja identidade mudou.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
+- `implicit`: `boolean`, required, does not accept `null`. Whether whatsmeow reported the change as implicit.
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `labels.association`
 
-Associacao ou remocao de label em chat ou mensagem.
+A label was associated with or removed from a chat or message.
 
 **Flag:** `labelsAssociation`
 
-**Eventos internos:** `*events.LabelAssociationChat`, `*events.LabelAssociationMessage`
+**Internal events:** `*events.LabelAssociationChat`, `*events.LabelAssociationMessage`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `LabelsAssociationWebhookData`
+**DTO/normalizer:** `LabelsAssociationWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1094,44 +1094,44 @@ x-webhook-event: labels.association
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Tipo de associacao. Valores possíveis: `chat`, `message`.
-- `chatJid`: `string`, obrigatório, não aceita `null`. JID da conversa.
-- `messageId`: `string`, opcional, não aceita `null`. ID da mensagem quando type=message.
-- `labelId`: `string`, obrigatório, não aceita `null`. ID da label.
-- `action`: `string`, opcional, não aceita `null`. Acao inferida quando labeled esta presente. Valores possíveis: `add`, `remove`.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 do processamento.
-- `additionalProperties`: `object`, opcional, não aceita `null`. Campos achatados do evento original.
+- `type`: `string`, required, does not accept `null`. Association type. Possible values: `chat`, `message`.
+- `chatJid`: `string`, required, does not accept `null`. Chat JID.
+- `messageId`: `string`, optional, does not accept `null`. Message id when type=message.
+- `labelId`: `string`, required, does not accept `null`. Label id.
+- `action`: `string`, optional, does not accept `null`. Action inferred when labeled is present. Possible values: `add`, `remove`.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 timestamp of the processing.
+- `additionalProperties`: `object`, optional, does not accept `null`. Flattened fields of the original event.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `chat`, `message`
 - `action`: `add`, `remove`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `labels.edit`
 
-Criacao, alteracao ou remocao de label.
+A label was created, changed or removed.
 
 **Flag:** `labelsEdit`
 
-**Eventos internos:** `*events.LabelEdit`
+**Internal events:** `*events.LabelEdit`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `LabelsEditWebhookData`
+**DTO/normalizer:** `LabelsEditWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1161,37 +1161,37 @@ x-webhook-event: labels.edit
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `string`, obrigatório, não aceita `null`. ID da label, derivado de labelId.
-- `name`: `string`, opcional, não aceita `null`. Nome da label quando informado.
-- `color`: `number`, opcional, não aceita `null`. Cor da label quando informada.
-- `deleted`: `boolean`, opcional, não aceita `null`. Indica label removida quando informado.
-- `additionalProperties`: `object`, opcional, não aceita `null`. Campos achatados do evento original.
+- `id`: `string`, required, does not accept `null`. Label id, derived from labelId.
+- `name`: `string`, optional, does not accept `null`. Label name when reported.
+- `color`: `number`, optional, does not accept `null`. Label color when reported.
+- `deleted`: `boolean`, optional, does not accept `null`. Whether the label was removed, when reported.
+- `additionalProperties`: `object`, optional, does not accept `null`. Flattened fields of the original event.
 
-#### Observações
+#### Notes
 
-- O normalizador nao adiciona campo `type` nem `dateTime` para este evento.
+- The normalizer adds neither a `type` nor a `dateTime` field for this event.
 
 ### `media.retry`
 
-Resultado ou erro relacionado a tentativa de retry de midia.
+Result or error of a media retry attempt.
 
 **Flag:** `mediaRetry`
 
-**Eventos internos:** `*events.MediaRetry`
+**Internal events:** `*events.MediaRetry`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MediaRetryWebhookData`
+**DTO/normalizer:** `MediaRetryWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1224,39 +1224,39 @@ x-webhook-event: media.retry
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `keyId`: `string`, obrigatório, não aceita `null`. ID da mensagem.
-- `chatJid`: `string`, obrigatório, não aceita `null`. JID da conversa.
-- `senderJid`: `string`, opcional, não aceita `null`. JID do remetente quando disponivel; omitido quando ausente.
-- `keyFromMe`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem e da propria instancia.
-- `hasCiphertext`: `boolean`, obrigatório, não aceita `null`. Indica se o evento carregou ciphertext.
-- `errorCode`: `number`, opcional, não aceita `null`. Codigo de erro quando informado; omitido quando ausente.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
+- `keyId`: `string`, required, does not accept `null`. Message id.
+- `chatJid`: `string`, required, does not accept `null`. Chat JID.
+- `senderJid`: `string`, optional, does not accept `null`. Sender JID when available; omitted when absent.
+- `keyFromMe`: `boolean`, required, does not accept `null`. Whether the message belongs to the instance itself.
+- `hasCiphertext`: `boolean`, required, does not accept `null`. Whether the event carried ciphertext.
+- `errorCode`: `number`, optional, does not accept `null`. Error code when reported; omitted when absent.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
 
-#### Observações
+#### Notes
 
-- Ciphertext e IV recebidos pelo whatsmeow nao sao expostos no webhook.
+- The ciphertext and IV whatsmeow received are not exposed in the webhook.
 
 ### `messages.delete`
 
-Mensagem removida localmente pelo evento DeleteForMe.
+A message was removed locally by the DeleteForMe event.
 
 **Flag:** `messagesDeleted`
 
-**Eventos internos:** `*events.DeleteForMe`
+**Internal events:** `*events.DeleteForMe`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MessageDeletedWebhookData`
+**DTO/normalizer:** `MessageDeletedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1291,41 +1291,41 @@ x-webhook-event: messages.delete
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `number`, opcional, não aceita `null`. ID interno da mensagem persistida quando encontrada pelo keyId.
-- `chatJid`: `string`, obrigatório, não aceita `null`. JID da conversa.
-- `senderJid`: `string`, opcional, não aceita `null`. JID do remetente quando disponivel; omitido quando ausente.
-- `keyFromMe`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem era da propria instancia.
-- `keyId`: `string`, obrigatório, não aceita `null`. ID da mensagem apagada.
-- `deleteMedia`: `boolean`, obrigatório, não aceita `null`. Indica se a midia local deve ser removida.
-- `fromFullSync`: `boolean`, obrigatório, não aceita `null`. Indica se veio de sincronizacao completa.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
-- `messageTime`: `string`, opcional, não aceita `null`. Timestamp RFC3339 UTC original da mensagem quando informado; omitido quando ausente.
+- `id`: `number`, optional, does not accept `null`. Internal id of the persisted message when found by keyId.
+- `chatJid`: `string`, required, does not accept `null`. Chat JID.
+- `senderJid`: `string`, optional, does not accept `null`. Sender JID when available; omitted when absent.
+- `keyFromMe`: `boolean`, required, does not accept `null`. Whether the message belonged to the instance itself.
+- `keyId`: `string`, required, does not accept `null`. Id of the deleted message.
+- `deleteMedia`: `boolean`, required, does not accept `null`. Whether the local media should be removed.
+- `fromFullSync`: `boolean`, required, does not accept `null`. Whether it came from a full synchronization.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
+- `messageTime`: `string`, optional, does not accept `null`. Original RFC3339 UTC timestamp of the message when reported; omitted when absent.
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `messages.star`
 
-Marcacao ou desmarcacao de estrela em mensagem.
+A message was starred or unstarred.
 
 **Flag:** `messagesStarred`
 
-**Eventos internos:** `*events.Star`
+**Internal events:** `*events.Star`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MessageStarredWebhookData`
+**DTO/normalizer:** `MessageStarredWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1358,39 +1358,39 @@ x-webhook-event: messages.star
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `chatJid`: `string`, obrigatório, não aceita `null`. JID da conversa.
-- `senderJid`: `string`, opcional, não aceita `null`. JID do remetente quando disponivel; omitido quando ausente.
-- `keyFromMe`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem e da propria instancia.
-- `keyId`: `string`, obrigatório, não aceita `null`. ID da mensagem.
-- `starred`: `boolean`, obrigatório, não aceita `null`. true quando marcada com estrela.
-- `fromFullSync`: `boolean`, obrigatório, não aceita `null`. Indica se veio de sincronizacao completa.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
+- `chatJid`: `string`, required, does not accept `null`. Chat JID.
+- `senderJid`: `string`, optional, does not accept `null`. Sender JID when available; omitted when absent.
+- `keyFromMe`: `boolean`, required, does not accept `null`. Whether the message belongs to the instance itself.
+- `keyId`: `string`, required, does not accept `null`. Message id.
+- `starred`: `boolean`, required, does not accept `null`. true when the message is starred.
+- `fromFullSync`: `boolean`, required, does not accept `null`. Whether it came from a full synchronization.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `messages.undecryptable`
 
-Mensagem recebida sem possibilidade de descriptografia.
+A message received that could not be decrypted.
 
 **Flag:** `messagesUndecryptable`
 
-**Eventos internos:** `*events.UndecryptableMessage`
+**Internal events:** `*events.UndecryptableMessage`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MessageUndecryptableWebhookData`
+**DTO/normalizer:** `MessageUndecryptableWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1424,45 +1424,45 @@ x-webhook-event: messages.undecryptable
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `keyId`: `string`, obrigatório, não aceita `null`. ID da chave/mensagem que falhou.
-- `chatJid`: `string`, obrigatório, não aceita `null`. JID da conversa.
-- `senderJid`: `string`, opcional, não aceita `null`. JID do remetente quando disponivel; omitido quando ausente.
-- `keyFromMe`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem e da propria instancia.
-- `isUnavailable`: `boolean`, obrigatório, não aceita `null`. Indica se o conteudo foi marcado como indisponivel.
-- `unavailableType`: `string`, opcional, não aceita `null`. Tipo de indisponibilidade. Valores possíveis: `view_once`.
-- `decryptFailMode`: `string`, opcional, não aceita `null`. Modo de falha reportado. Valores possíveis: `hide`.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
+- `keyId`: `string`, required, does not accept `null`. Id of the key or message that failed.
+- `chatJid`: `string`, required, does not accept `null`. Chat JID.
+- `senderJid`: `string`, optional, does not accept `null`. Sender JID when available; omitted when absent.
+- `keyFromMe`: `boolean`, required, does not accept `null`. Whether the message belongs to the instance itself.
+- `isUnavailable`: `boolean`, required, does not accept `null`. Whether the content was marked as unavailable.
+- `unavailableType`: `string`, optional, does not accept `null`. Unavailability type. Possible values: `view_once`.
+- `decryptFailMode`: `string`, optional, does not accept `null`. Reported failure mode. Possible values: `hide`.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
 
-#### Valores possíveis
+#### Possible values
 
 - `unavailableType`: `view_once`
 - `decryptFailMode`: `hide`
 
-#### Observações
+#### Notes
 
-- Campos vazios sao omitidos por omitempty.
+- Empty fields are dropped by omitempty.
 
 ### `messages.update`
 
-Atualizacao de recibo/status de uma mensagem ja conhecida.
+The receipt or status of an already known message was updated.
 
 **Flag:** `messagesUpdated`
 
-**Eventos internos:** `*events.Receipt`
+**Internal events:** `*events.Receipt`
 
-**Persistência:** O webhook e entregue mesmo quando Config.Persistence.MessageUpdates=false. Quando true, a mensagem e localizada e a atualizacao e persistida antes da entrega.
+**Persistence:** The webhook is delivered even when Config.Persistence.MessageUpdates=false. When true, the message is located and the update persisted before delivery.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MessageUpdateWebhookData`
+**DTO/normalizer:** `MessageUpdateWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1492,43 +1492,43 @@ x-webhook-event: messages.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `number`, obrigatório, não aceita `null`. ID interno da mensagem persistida; 0 quando a persistencia de atualizacoes esta desabilitada.
-- `keyId`: `string`, obrigatório, não aceita `null`. ID externo/chave da mensagem no WhatsApp.
-- `status`: `string`, obrigatório, não aceita `null`. Status normalizado do recibo. Valores possíveis: `delivered`, `sent`, `read`, `played`, `server_error`, `retry`, `unknown`.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do recibo; usa o timestamp do evento ou o horario do processamento.
+- `id`: `number`, required, does not accept `null`. Internal id of the persisted message; 0 when update persistence is disabled.
+- `keyId`: `string`, required, does not accept `null`. External id or key of the message on WhatsApp.
+- `status`: `string`, required, does not accept `null`. Normalized receipt status. Possible values: `delivered`, `sent`, `read`, `played`, `server_error`, `retry`, `unknown`.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the receipt; it uses the event timestamp or the processing time.
 
-#### Valores possíveis
+#### Possible values
 
 - `status`: `delivered`, `sent`, `read`, `played`, `server_error`, `retry`, `unknown`
 
-#### Observações
+#### Notes
 
-- Com Config.Persistence.MessageUpdates=true, a mensagem precisa existir; se nao for encontrada apos as tentativas configuradas, o evento e descartado.
-- Com a persistencia desabilitada, id e 0 e keyId continua identificando a mensagem do recibo.
+- With Config.Persistence.MessageUpdates=true the message has to exist; if it is not found after the configured attempts, the event is dropped.
+- With persistence disabled, id is 0 and keyId still identifies the message the receipt is about.
 
 ### `messages.upsert`
 
-Mensagem recebida e persistida pela aplicacao.
+A message received and persisted by the application.
 
 **Flag:** `messagesUpsert`
 
-**Eventos internos:** `*events.Message`, `*events.FBMessage`
+**Internal events:** `*events.Message`, `*events.FBMessage`
 
-**Persistência:** Requer Config.Persistence.Messages=true. A mensagem e persistida com CreateOrIgnore e relida antes da entrega.
+**Persistence:** Requires Config.Persistence.Messages=true. The message is persisted with CreateOrIgnore and read back before delivery.
 
-**Flag de persistência:** `Config.Persistence.Messages`
+**Persistence flag:** `Config.Persistence.Messages`
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MessageWebhookData`
+**DTO/normalizer:** `MessageWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/event_persistence.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1570,46 +1570,46 @@ x-webhook-event: messages.upsert
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `number`, obrigatório, não aceita `null`. ID interno da mensagem.
-- `keyId`: `string`, obrigatório, não aceita `null`. ID externo/chave da mensagem no WhatsApp.
-- `keyRemoteJid`: `string | null`, obrigatório, aceita `null`. JID remoto da mensagem.
-- `keyLid`: `string | null`, obrigatório, aceita `null`. LID remoto da mensagem.
-- `keyFromMe`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem foi enviada pela propria instancia.
-- `keyParticipant`: `string | null`, obrigatório, aceita `null`. Participante em mensagens de grupo.
-- `keyParticipantLid`: `string | null`, obrigatório, aceita `null`. LID do participante em mensagens de grupo.
-- `pushName`: `string | null`, obrigatório, aceita `null`. Nome exibido do remetente quando conhecido.
-- `messageType`: `string`, obrigatório, não aceita `null`. Tipo normalizado da mensagem.
-- `content`: `object`, obrigatório, não aceita `null`. Conteudo normalizado da mensagem.
-- `messageTimestamp`: `number`, obrigatório, não aceita `null`. Timestamp Unix em segundos.
-- `device`: `string | null`, obrigatório, aceita `null`. Dispositivo/origem inferida da mensagem.
-- `isGroup`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem pertence a grupo.
-- `metadata`: `object | null`, obrigatório, aceita `null`. Metadados adicionais normalizados.
+- `id`: `number`, required, does not accept `null`. Internal message id.
+- `keyId`: `string`, required, does not accept `null`. External id or key of the message on WhatsApp.
+- `keyRemoteJid`: `string | null`, required, accepts `null`. Remote JID of the message.
+- `keyLid`: `string | null`, required, accepts `null`. Remote LID of the message.
+- `keyFromMe`: `boolean`, required, does not accept `null`. Whether the message was sent by the instance itself.
+- `keyParticipant`: `string | null`, required, accepts `null`. Participant in group messages.
+- `keyParticipantLid`: `string | null`, required, accepts `null`. LID of the participant in group messages.
+- `pushName`: `string | null`, required, accepts `null`. Display name of the sender when known.
+- `messageType`: `string`, required, does not accept `null`. Normalized message type.
+- `content`: `object`, required, does not accept `null`. Normalized message content.
+- `messageTimestamp`: `number`, required, does not accept `null`. Unix timestamp in seconds.
+- `device`: `string | null`, required, accepts `null`. Device or source inferred for the message.
+- `isGroup`: `boolean`, required, does not accept `null`. Whether the message belongs to a group.
+- `metadata`: `object | null`, required, accepts `null`. Metadados adicionais normalizados.
 
-#### Observações
+#### Notes
 
-- Se a persistencia ou a releitura da mensagem falhar, o webhook nao e emitido.
+- If persisting or reading the message back fails, the webhook is not emitted.
 
 ### `news.letter`
 
-Eventos relacionados a newsletters/canais.
+Events related to newsletters and channels.
 
 **Flag:** `newsLetter`
 
-**Eventos internos:** `*events.NewsletterJoin`, `*events.NewsletterLeave`, `*events.NewsletterLiveUpdate`, `*events.NewsletterMessageMeta`, `*events.NewsletterMuteChange`
+**Internal events:** `*events.NewsletterJoin`, `*events.NewsletterLeave`, `*events.NewsletterLiveUpdate`, `*events.NewsletterMessageMeta`, `*events.NewsletterMuteChange`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `NewsLetterWebhookData`
+**DTO/normalizer:** `NewsLetterWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_extended_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1639,40 +1639,40 @@ x-webhook-event: news.letter
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Subtipo do evento de newsletter. Valores possíveis: `join`, `leave`, `live.update`, `message.meta`, `mute.change`.
-- `newsletterJid`: `string`, opcional, não aceita `null`. JID da newsletter quando a origem traz id ou jid.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 do processamento.
-- `additionalProperties`: `object`, opcional, não aceita `null`. Campos achatados do evento original.
+- `type`: `string`, required, does not accept `null`. Subtype of the newsletter event. Possible values: `join`, `leave`, `live.update`, `message.meta`, `mute.change`.
+- `newsletterJid`: `string`, optional, does not accept `null`. Newsletter JID when the source carries an id or jid.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 timestamp of the processing.
+- `additionalProperties`: `object`, optional, does not accept `null`. Flattened fields of the original event.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `join`, `leave`, `live.update`, `message.meta`, `mute.change`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `presence.updated`
 
-Atualizacao de presenca de usuario ou presenca em chat.
+User presence or chat presence was updated.
 
 **Flag:** `presenceUpdated`
 
-**Eventos internos:** `*events.ChatPresence`, `*events.Presence`
+**Internal events:** `*events.ChatPresence`, `*events.Presence`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `PresenceUpdatedWebhookData`
+**DTO/normalizer:** `PresenceUpdatedWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1703,45 +1703,45 @@ x-webhook-event: presence.updated
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, opcional, não aceita `null`. Tipo fixo presence no payload vindo de *events.Presence. Valores possíveis: `presence`.
-- `chatJid`: `string`, opcional, não aceita `null`. JID do chat no payload de ChatPresence.
-- `senderJid`: `string`, opcional, não aceita `null`. JID do remetente no payload de ChatPresence.
-- `state`: `string`, opcional, não aceita `null`. Estado de presenca no payload de ChatPresence.
-- `media`: `string`, opcional, não aceita `null`. Tipo de midia quando presenca esta relacionada a midia.
-- `jid`: `string`, opcional, não aceita `null`. JID no payload de Presence.
-- `unavailable`: `boolean`, opcional, não aceita `null`. Indica indisponibilidade no payload de Presence.
-- `lastSeen`: `string`, opcional, não aceita `null`. Ultimo visto quando informado.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 do processamento.
+- `type`: `string`, optional, does not accept `null`. Fixed presence type in the payload coming from *events.Presence. Possible values: `presence`.
+- `chatJid`: `string`, optional, does not accept `null`. Chat JID in the ChatPresence payload.
+- `senderJid`: `string`, optional, does not accept `null`. Sender JID in the ChatPresence payload.
+- `state`: `string`, optional, does not accept `null`. Presence state in the ChatPresence payload.
+- `media`: `string`, optional, does not accept `null`. Media type when the presence relates to media.
+- `jid`: `string`, optional, does not accept `null`. JID in the Presence payload.
+- `unavailable`: `boolean`, optional, does not accept `null`. Whether the user is unavailable, in the Presence payload.
+- `lastSeen`: `string`, optional, does not accept `null`. Last seen when reported.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 timestamp of the processing.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `presence`
 
-#### Observações
+#### Notes
 
-- O formato varia entre ChatPresence e Presence; use os campos presentes no payload recebido.
+- The shape differs between ChatPresence and Presence; use the fields present in the payload you receive.
 
 ### `profile.picture.update`
 
-Atualizacao de foto de perfil da propria instancia ou de outro JID.
+The profile picture of the instance itself or of another JID was updated.
 
 **Flag:** `profilePictureUpdated`
 
-**Eventos internos:** `*events.Picture`
+**Internal events:** `*events.Picture`
 
-**Persistência:** Quando o JID e a propria instancia, atualiza profilePicUrl da instancia antes da entrega. Para outros JIDs nao ha persistencia especifica.
+**Persistence:** When the JID is the instance itself, the instance profilePicUrl is updated before delivery. For other JIDs there is no specific persistence.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `ProfilePictureUpdatedWebhookData`
+**DTO/normalizer:** `ProfilePictureUpdatedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1773,38 +1773,38 @@ x-webhook-event: profile.picture.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `jid`: `string`, obrigatório, não aceita `null`. JID que teve a foto alterada.
-- `author`: `string`, opcional, não aceita `null`. JID do autor quando informado; omitido quando vazio.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
-- `remove`: `boolean`, obrigatório, não aceita `null`. Indica remocao de foto.
-- `pictureId`: `string`, opcional, não aceita `null`. ID da foto quando informado; omitido quando vazio.
-- `isGroup`: `boolean`, obrigatório, não aceita `null`. Indica se o JID pertence a grupo.
+- `jid`: `string`, required, does not accept `null`. JID whose picture changed.
+- `author`: `string`, optional, does not accept `null`. Author JID when reported; omitted when empty.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
+- `remove`: `boolean`, required, does not accept `null`. Whether the picture was removed.
+- `pictureId`: `string`, optional, does not accept `null`. Picture id when reported; omitted when empty.
+- `isGroup`: `boolean`, required, does not accept `null`. Whether the JID belongs to a group.
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `qrcode.updated`
 
-Novo QR Code disponivel para pareamento da instancia.
+A new QR code is available for pairing the instance.
 
 **Flag:** `qrcodeUpdated`
 
-**Eventos internos:** `QR channel`
+**Internal events:** `QR channel`
 
-**Persistência:** Atualiza o status da instancia para qr_code antes da entrega.
+**Persistence:** Sets the instance status to qr_code before delivery.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `QRCodeUpdatedWebhookData`
+**DTO/normalizer:** `QRCodeUpdatedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/manager.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/manager.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1835,37 +1835,37 @@ x-webhook-event: qrcode.updated
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `count`: `number`, obrigatório, não aceita `null`. Quantidade de QRs emitidos nesta tentativa.
-- `code`: `string`, obrigatório, não aceita `null`. Codigo bruto do QR Code.
-- `base64`: `string`, obrigatório, não aceita `null`. Imagem do QR Code em data URL base64.
-- `expiresInSeconds`: `number`, obrigatório, não aceita `null`. Tempo restante informado pelo canal de QR, em segundos.
-- `expiresAt`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC calculado para expiracao do QR Code.
+- `count`: `number`, required, does not accept `null`. Number of QR codes emitted in this attempt.
+- `code`: `string`, required, does not accept `null`. Raw QR code payload.
+- `base64`: `string`, required, does not accept `null`. QR code image as a base64 data URL.
+- `expiresInSeconds`: `number`, required, does not accept `null`. Time left as reported by the QR channel, in seconds.
+- `expiresAt`: `string`, required, does not accept `null`. RFC3339 UTC timestamp computed for the QR code expiry.
 
-#### Observações
+#### Notes
 
-- Evento emitido pelo fluxo de QR, nao diretamente por um struct de evento do whatsmeow.
+- Emitted by the QR flow rather than directly by a whatsmeow event struct.
 
 ### `send.message`
 
-Mensagem enviada pela API apos envio e persistencia bem-sucedidos.
+A message sent through the API, after a successful send and persistence.
 
 **Flag:** `sendMessage`
 
-**Eventos internos:** `message service send result`
+**Internal events:** `message service send result`
 
-**Persistência:** Persistida antes da entrega pelo fluxo de envio de mensagens da API.
+**Persistence:** Persisted before delivery by the API message-sending flow.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `MessageWebhookData`
+**DTO/normalizer:** `MessageWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/message/service.go`, `internal/message/audio.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/message/service.go`, `internal/message/audio.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1879,7 +1879,7 @@ x-webhook-event: send.message
 {
   "data": {
     "content": {
-      "text": "Mensagem enviada"
+      "text": "Sent message"
     },
     "device": "web",
     "id": 2048,
@@ -1907,47 +1907,47 @@ x-webhook-event: send.message
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `id`: `number`, obrigatório, não aceita `null`. ID interno da mensagem.
-- `keyId`: `string`, obrigatório, não aceita `null`. ID externo/chave da mensagem no WhatsApp.
-- `keyRemoteJid`: `string | null`, obrigatório, aceita `null`. JID remoto da mensagem.
-- `keyLid`: `string | null`, obrigatório, aceita `null`. LID remoto da mensagem.
-- `keyFromMe`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem foi enviada pela propria instancia.
-- `keyParticipant`: `string | null`, obrigatório, aceita `null`. Participante em mensagens de grupo.
-- `keyParticipantLid`: `string | null`, obrigatório, aceita `null`. LID do participante em mensagens de grupo.
-- `pushName`: `string | null`, obrigatório, aceita `null`. Nome exibido do remetente quando conhecido.
-- `messageType`: `string`, obrigatório, não aceita `null`. Tipo normalizado da mensagem.
-- `content`: `object`, obrigatório, não aceita `null`. Conteudo normalizado da mensagem.
-- `messageTimestamp`: `number`, obrigatório, não aceita `null`. Timestamp Unix em segundos.
-- `device`: `string | null`, obrigatório, aceita `null`. Dispositivo/origem inferida da mensagem.
-- `isGroup`: `boolean`, obrigatório, não aceita `null`. Indica se a mensagem pertence a grupo.
-- `metadata`: `object | null`, obrigatório, aceita `null`. Metadados adicionais normalizados.
+- `id`: `number`, required, does not accept `null`. Internal message id.
+- `keyId`: `string`, required, does not accept `null`. External id or key of the message on WhatsApp.
+- `keyRemoteJid`: `string | null`, required, accepts `null`. Remote JID of the message.
+- `keyLid`: `string | null`, required, accepts `null`. Remote LID of the message.
+- `keyFromMe`: `boolean`, required, does not accept `null`. Whether the message was sent by the instance itself.
+- `keyParticipant`: `string | null`, required, accepts `null`. Participant in group messages.
+- `keyParticipantLid`: `string | null`, required, accepts `null`. LID of the participant in group messages.
+- `pushName`: `string | null`, required, accepts `null`. Display name of the sender when known.
+- `messageType`: `string`, required, does not accept `null`. Normalized message type.
+- `content`: `object`, required, does not accept `null`. Normalized message content.
+- `messageTimestamp`: `number`, required, does not accept `null`. Unix timestamp in seconds.
+- `device`: `string | null`, required, accepts `null`. Device or source inferred for the message.
+- `isGroup`: `boolean`, required, does not accept `null`. Whether the message belongs to a group.
+- `metadata`: `object | null`, required, accepts `null`. Metadados adicionais normalizados.
 
-#### Observações
+#### Notes
 
-- Usa o mesmo DTO de messages.upsert, mas a origem e o envio pela propria API.
-- Quando uma mensagem e aceita com options.mentionAll=true, o mesmo evento send.message tambem entrega o resultado definitivo do processamento assincrono. Nesse caso, data contem processId, status, mentionAll, externalAttributes e, em caso de sucesso, data.messageId, data.remoteJid, data.participantCount e data.timestamp. Em caso de falha, contem error.code e error.message.
+- Uses the same DTO as messages.upsert, but the source is a send through the API itself.
+- When a message is accepted with options.mentionAll=true, the same send.message event also delivers the final result of the asynchronous processing. In that case data carries processId, status, mentionAll, externalAttributes and, on success, data.messageId, data.remoteJid, data.participantCount and data.timestamp. On failure it carries error.code and error.message.
 
 ### `settings.update`
 
-Atualizacao de configuracoes do usuario/instancia.
+User or instance settings were updated.
 
 **Flag:** `settingsUpdated`
 
-**Eventos internos:** `*events.PushNameSetting`, `*events.UserStatusMute`
+**Internal events:** `*events.PushNameSetting`, `*events.UserStatusMute`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `SettingsUpdatedWebhookData`
+**DTO/normalizer:** `SettingsUpdatedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/whatsapp/webhook_events.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -1962,7 +1962,7 @@ x-webhook-event: settings.update
   "data": {
     "dateTime": "2026-07-04T18:00:00Z",
     "fromFullSync": false,
-    "name": "Minha instancia",
+    "name": "My instance",
     "type": "push.name"
   },
   "event": "settings.update",
@@ -1977,42 +1977,42 @@ x-webhook-event: settings.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Subtipo de configuracao. Valores possíveis: `push.name`, `user.status.mute`.
-- `jid`: `string`, opcional, não aceita `null`. JID afetado quando o subtipo informar.
-- `name`: `string`, opcional, não aceita `null`. Nome configurado no subtipo push.name.
-- `muted`: `boolean`, opcional, não aceita `null`. Estado de mute no subtipo user.status.mute.
-- `fromFullSync`: `boolean`, obrigatório, não aceita `null`. Indica se veio de sincronizacao completa.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 UTC do evento ou do processamento.
+- `type`: `string`, required, does not accept `null`. Settings subtype. Possible values: `push.name`, `user.status.mute`.
+- `jid`: `string`, optional, does not accept `null`. Affected JID when the subtype reports one.
+- `name`: `string`, optional, does not accept `null`. Name set in the push.name subtype.
+- `muted`: `boolean`, optional, does not accept `null`. Mute state in the user.status.mute subtype.
+- `fromFullSync`: `boolean`, required, does not accept `null`. Whether it came from a full synchronization.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 UTC timestamp of the event or of the processing.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `push.name`, `user.status.mute`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `status.instance`
 
-Eventos de estado operacional ou avisos da instancia.
+Operational state events or warnings from the instance.
 
 **Flag:** `statusInstance`
 
-**Eventos internos:** `*events.ClientOutdated`, `*events.TemporaryBan`, `*events.OfflineSyncPreview`, `*events.OfflineSyncCompleted`, `*events.PrivacySettings`, `*events.AppState`, `*events.AppStateSyncComplete`, `*events.AppStateSyncError`, `*events.AccountReachoutTimelock`
+**Internal events:** `*events.ClientOutdated`, `*events.TemporaryBan`, `*events.OfflineSyncPreview`, `*events.OfflineSyncCompleted`, `*events.PrivacySettings`, `*events.AppState`, `*events.AppStateSyncComplete`, `*events.AppStateSyncError`, `*events.AccountReachoutTimelock`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `InstanceStatusWebhookData`
+**DTO/normalizer:** `InstanceStatusWebhookData`
 
-**Campos dinâmicos:** sim
+**Dynamic fields:** yes
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -2043,40 +2043,40 @@ x-webhook-event: status.instance
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `type`: `string`, obrigatório, não aceita `null`. Subtipo do status da instancia.
-- `status`: `string`, opcional, não aceita `null`. Status textual do subtipo; omitido quando vazio.
-- `message`: `string`, opcional, não aceita `null`. Mensagem tecnica ou humana; omitida quando vazia.
-- `data`: `object`, opcional, não aceita `null`. Dados adicionais do subtipo; omitido quando ausente.
+- `type`: `string`, required, does not accept `null`. Subtype of the instance status.
+- `status`: `string`, optional, does not accept `null`. Textual status of the subtype; omitted when empty.
+- `message`: `string`, optional, does not accept `null`. Technical or human-readable message; omitted when empty.
+- `data`: `object`, optional, does not accept `null`. Additional data for the subtype; omitted when absent.
 
-#### Valores possíveis
+#### Possible values
 
 - `type`: `client.outdated`, `temporary.ban`, `offline.sync.preview`, `offline.sync.completed`, `privacy.settings`, `app.state`, `app.state.sync.completed`, `app.state.sync.error`, `account.reachout.timelock`
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
 ### `user.about.update`
 
-Atualizacao do recado/about de um usuario.
+A user's about text was updated.
 
 **Flag:** `userAboutUpdated`
 
-**Eventos internos:** `*events.UserAbout`
+**Internal events:** `*events.UserAbout`
 
-**Persistência:** Nao persiste dados especificos antes da entrega do webhook.
+**Persistence:** Persists no specific data before delivering the webhook.
 
-**Tipo de `data`:** `object`
+**Type of `data`:** `object`
 
-**DTO/normalizador:** `UserAboutUpdatedWebhookData`
+**DTO/normalizer:** `UserAboutUpdatedWebhookData`
 
-**Campos dinâmicos:** não
+**Dynamic fields:** no
 
-**Implementado em:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
+**Implemented in:** `internal/whatsapp/service.go`, `internal/webhook/payload.go`
 
-#### Requisição
+#### Request
 
 ```http
 POST /webhooks/beplus HTTP/1.1
@@ -2105,24 +2105,24 @@ x-webhook-event: user.about.update
 }
 ```
 
-#### Campos de `data`
+#### Fields of `data`
 
-- `jid`: `string`, obrigatório, não aceita `null`. JID do usuario.
-- `status`: `string`, opcional, não aceita `null`. Texto do about quando informado.
-- `dateTime`: `string`, obrigatório, não aceita `null`. Timestamp RFC3339 do processamento.
+- `jid`: `string`, required, does not accept `null`. User JID.
+- `status`: `string`, optional, does not accept `null`. About text when reported.
+- `dateTime`: `string`, required, does not accept `null`. RFC3339 timestamp of the processing.
 
-#### Observações
+#### Notes
 
-- Sem observações adicionais.
+- No additional notes.
 
-## Eventos não suportados ou ignorados
+## Unsupported or ignored events
 
-| Evento interno | Status | Motivo |
+| Internal event | Status | Reason |
 | --- | --- | --- |
-| `PairPasskeyConfirmation` | `intentionally_ignored` | Evento interativo de pareamento com codigo; nao e contrato de webhook. |
-| `PairPasskeyError` | `handled_without_webhook` | Tratado como estado/log de pareamento; nao ha payload publico estavel. |
-| `PairPasskeyRequest` | `intentionally_ignored` | Contem desafio/chave publica de pareamento e nao e serializado para webhook. |
-| `QRScannedWithoutMultidevice` | `handled_without_webhook` | O canal de QR converte o caso em falha de pareamento; emissoes diretas futuras caem em log fallback. |
-| `MediaRetryError` | `internal_only` | Struct auxiliar de erro usada dentro do payload de media.retry. |
-| `MexNotificationData` | `internal_only` | Struct auxiliar para notificacoes MEX sem evento publico dedicado. |
-| `NewsletterMessageMeta` | `internal_only` | Struct auxiliar usada dentro de news.letter. |
+| `PairPasskeyConfirmation` | `intentionally_ignored` | Interactive pairing event carrying a code; it is not part of the webhook contract. |
+| `PairPasskeyError` | `handled_without_webhook` | Handled as pairing state and log; there is no stable public payload. |
+| `PairPasskeyRequest` | `intentionally_ignored` | Carries the pairing challenge and public key, and is not serialized into a webhook. |
+| `QRScannedWithoutMultidevice` | `handled_without_webhook` | The QR channel turns this case into a pairing failure; future direct emissions fall through to the fallback log. |
+| `MediaRetryError` | `internal_only` | Support error struct used inside the media.retry payload. |
+| `MexNotificationData` | `internal_only` | Support struct for MEX notifications with no dedicated public event. |
+| `NewsletterMessageMeta` | `internal_only` | Support struct used inside news.letter. |
