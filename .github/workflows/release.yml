@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The whole history: the notes are generated against the previous tag,
           # and a shallow clone has no previous tag to name.
@@ -39,6 +39,24 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+
+          # A tag can be pushed from any local branch. Publishing it before its
+          # commit reaches main creates an immutable release from code that CI
+          # on the release branch never accepted. Peel the tag so this check is
+          # identical for annotated and lightweight tags, and ask Git about
+          # ancestry instead of trusting the branch that triggered the event.
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main
+
+          if ! tag_commit="$(git rev-parse --verify "${TAG}^{commit}" 2>/dev/null)"; then
+            echo "refusing release: tag ${TAG} does not resolve to a commit" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main; then
+            echo "refusing release: tag ${TAG} points to ${tag_commit}, which is not in origin/main" >&2
+            echo "merge the release commit into main before pushing the tag" >&2
+            exit 1
+          fi
 
           # The baseline for the notes, asked of the history rather than of a
           # date-sorted tag list: sorting puts whatever tag was created last in
@@ -91,11 +109,11 @@ jobs:
           } > CHANGELOG.next
           mv CHANGELOG.next CHANGELOG.md
 
-          git config user.name "HYZIS"
-          git config user.email "admin@hyz.is"
+          git config user.name "Paulo R. Lima"
+          git config user.email "paulorlima@hyz.is"
           git add CHANGELOG.md
           # A release with an empty body leaves the file alone, which is not a
           # failure.
           git diff --cached --quiet && exit 0
-          git commit -m "Write ${TAG} into the changelog"
+          git commit -s -m "Write ${TAG} into the changelog"
           git push origin main

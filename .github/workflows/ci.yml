@@ -14,13 +14,13 @@ jobs:
     env:
       GOWORK: "off"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The api diff step reads the last release out of a tag, and a
           # shallow clone has neither the tags nor the commits behind them.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           # Not go-version-file: go.mod declares the MINIMUM language version,
           # and setup-go would install exactly that -- a patch release whose
@@ -50,6 +50,15 @@ jobs:
 
       - name: test
         run: go test -race ./...
+
+      # A known vulnerability blocks the merge rather than showing up in a
+      # report nobody reads. Unpinned on purpose: it reads its database at run
+      # time, so pinning the binary would not hold the answer still, and going
+      # red on a newly published vulnerability is the point of it.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
       # A v0 release may break, but every break has to tell an installer exactly
       # what to replace. Module mode is what sees a deleted package or type,
