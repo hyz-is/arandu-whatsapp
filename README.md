@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/logo.svg" alt="Arandu" width="180">
+</p>
+
 # Arandu WhatsApp
 
 WhatsApp API module for Arandu applications. It provides instance management,
