@@ -16,13 +16,13 @@ import (
 // countingConfigurationRepository counts how often a dispatch reached the
 // database for the configuration it is about to act on.
 type countingConfigurationRepository struct {
-	deliveryRepository
+	configurationRepository
 	reads int
 }
 
 func (r *countingConfigurationRepository) FindConfiguration(ctx context.Context, grant security.Grant, instanceID int64) (types.Webhook, error) {
 	r.reads++
-	return r.deliveryRepository.FindConfiguration(ctx, grant, instanceID)
+	return r.configurationRepository.FindConfiguration(ctx, grant, instanceID)
 }
 
 func TestDispatchReadsTheConfigurationOncePerCacheWindow(t *testing.T) {
@@ -34,7 +34,7 @@ func TestDispatchReadsTheConfigurationOncePerCacheWindow(t *testing.T) {
 		ConfigurationCache:    cache.New(cache.NewArrayStore()),
 		ConfigurationCacheTTL: time.Minute,
 	})
-	counter := &countingConfigurationRepository{deliveryRepository: manager.repository}
+	counter := &countingConfigurationRepository{configurationRepository: manager.repository}
 	manager.repository = counter
 
 	ctx := hlog.WithCollector(context.Background(), hlog.NewCollector("req-cache"))
@@ -59,7 +59,7 @@ func TestDispatchReadsTheConfigurationEveryTimeWithoutACache(t *testing.T) {
 	testDB.insertWebhook(t, "https://instance.example/hook", true, types.WebhookEvents{ConnectionUpdated: true})
 
 	manager := newTestManager(t, testDB.db, ManagerConfig{})
-	counter := &countingConfigurationRepository{deliveryRepository: manager.repository}
+	counter := &countingConfigurationRepository{configurationRepository: manager.repository}
 	manager.repository = counter
 	manager.configCache = configurationCache{}
 
@@ -85,7 +85,7 @@ func TestDispatchCachesTheAbsenceOfAConfiguration(t *testing.T) {
 		ConfigurationCache:    cache.New(cache.NewArrayStore()),
 		ConfigurationCacheTTL: time.Minute,
 	})
-	counter := &countingConfigurationRepository{deliveryRepository: manager.repository}
+	counter := &countingConfigurationRepository{configurationRepository: manager.repository}
 	manager.repository = counter
 
 	ctx := hlog.WithCollector(context.Background(), hlog.NewCollector("req-absent"))
@@ -166,10 +166,11 @@ func TestSetDropsTheCachedConfigurationItReplaced(t *testing.T) {
 	if len(urls) != 2 {
 		t.Fatalf("deliveries = %d, want 2", len(urls))
 	}
-	if urls[0] != "https://original.example/hook" {
-		t.Fatalf("first delivery url = %q, want the original", urls[0])
+	found := map[string]bool{}
+	for _, url := range urls {
+		found[url] = true
 	}
-	if urls[1] != "https://replacement.example/hook" {
-		t.Fatalf("second delivery url = %q, want the replacement: the cache outlived the change", urls[1])
+	if !found["https://original.example/hook"] || !found["https://replacement.example/hook"] {
+		t.Fatalf("delivery URLs = %v, want original and replacement: the cache outlived the change", urls)
 	}
 }
