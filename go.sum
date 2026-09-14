@@ -6,8 +6,8 @@ github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KO
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 h1:bvNMNQO63//z+xNgfBlViaCIJKLlCJ6/fmUseuG0wVQ=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883/go.mod h1:rCTlJbsFo29Kk6CurOXKm700vrz8f0KW0JNfpkRJY/8=
-github.com/arandu-io/framework v0.46.4 h1:C3fPx9l1IBfFIBwNLyBsyMNcA0O2jPDhFN6byBSf2IU=
-github.com/arandu-io/framework v0.46.4/go.mod h1:YbQEG1utV2e4CJeCfevL53J2A3I+cmhiA06EsR61+iY=
+github.com/arandu-io/framework v0.47.0 h1:BCzMO2INVvjtvfRrj8DF5nXbcfaRgYPgAk4a7XDo13I=
+github.com/arandu-io/framework v0.47.0/go.mod h1:lcAKpq0C1iuF8N5hXlZBCtQnPS1JAuvRNakImVgBBQY=
 github.com/arandu-io/hesape v0.41.0 h1:BJOLBWVvWp4ZGBrZSjQjVVmLPvGfhHq+fkY4LwjuC0g=
 github.com/arandu-io/hesape v0.41.0/go.mod h1:KNXJJuKrDIpWvJgNbE2LxtHkOqO4J6cqPkmMcNlxrL0=
 github.com/beeper/argo-go v1.1.2 h1:UQI2G8F+NLfGTOmTUI0254pGKx/HUU/etbUGTJv91Fs=
