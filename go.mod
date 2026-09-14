@@ -3,7 +3,7 @@ module github.com/hyz-is/arandu-whatsapp
 go 1.26.0
 
 require (
-	github.com/arandu-io/framework v0.46.4
+	github.com/arandu-io/framework v0.47.0
 	github.com/arandu-io/hesape v0.41.0
 	github.com/hyz-is/arandu-swagger v0.1.0
 	github.com/lib/pq v1.12.3
