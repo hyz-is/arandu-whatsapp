@@ -27,5 +27,6 @@ func Migrations(upgrader SchemaUpgrader) []foundation.Migration {
 		},
 		createWebhookDeliveries{},
 		createMessageJobs{},
+		expandWebhookDeliveries{},
 	}
 }

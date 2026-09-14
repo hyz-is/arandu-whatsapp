@@ -230,6 +230,7 @@ func TestModuleDeclaresCanonicalMigrations(t *testing.T) {
 		"20260825_0002_upgrade_whatsmeow_store",
 		"20260825_0003_create_webhook_deliveries",
 		"20260825_0004_create_message_jobs",
+		"20260825_0005_expand_webhook_deliveries",
 	}
 	if len(declared) != len(want) {
 		t.Fatalf("declared %d migrations, want %d", len(declared), len(want))
@@ -250,6 +251,9 @@ func TestModuleDeclaresCanonicalMigrations(t *testing.T) {
 	}
 	if _, ok := declared[3].(migrations.ReversibleMigration); !ok {
 		t.Error("the message job migration is not reversible")
+	}
+	if _, ok := declared[4].(migrations.ReversibleMigration); !ok {
+		t.Error("the webhook delivery expansion is not reversible")
 	}
 	if declared[1].WithinTransaction() {
 		t.Error("the delegated WhatsMeow migration must run outside Arandu's transaction")

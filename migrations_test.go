@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ func TestMigrationsRunThroughHesapeMigratorAndRollbackOwnedSchema(t *testing.T) 
 		"20260825_0002_upgrade_whatsmeow_store",
 		"20260825_0003_create_webhook_deliveries",
 		"20260825_0004_create_message_jobs",
+		"20260825_0005_expand_webhook_deliveries",
 	}
 	if got := migrationNames(declared); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("migration names = %v, want %v", got, wantNames)
@@ -53,6 +55,9 @@ func TestMigrationsRunThroughHesapeMigratorAndRollbackOwnedSchema(t *testing.T) 
 	}
 	if _, ok := declared[3].(migrations.ReversibleMigration); !ok {
 		t.Fatal("the message job migration is not reversible")
+	}
+	if _, ok := declared[4].(migrations.ReversibleMigration); !ok {
+		t.Fatal("the webhook delivery expansion is not reversible")
 	}
 	if declared[1].WithinTransaction() {
 		t.Fatal("the delegated WhatsMeow migration must run outside Arandu's transaction")
@@ -129,6 +134,27 @@ func TestMigrationsRunThroughHesapeMigratorAndRollbackOwnedSchema(t *testing.T) 
 		"pending", 0, now, now); err == nil {
 		t.Fatal("cross-tenant webhook delivery foreign key was accepted")
 	}
+	if _, err := db.Exec(`INSERT INTO whatsapp_webhook_deliveries
+		(id, tenant_id, instance_id, event, target, url, body, headers, status,
+		 attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, "legacy-delivery", "acme", 1,
+		"connection.update", "instance", "https://example.com/hook", `{}`, `{}`,
+		"pending", 0, now, now); err != nil {
+		t.Fatalf("preceding binary INSERT failed after 0005: %v", err)
+	}
+	var legacyEvent, legacyEndpoint sql.NullString
+	var secretRef string
+	var permanent bool
+	var claimVersion int64
+	if err := db.QueryRow(`SELECT event_id, endpoint_id, secret_ref, permanent, claim_version
+		FROM whatsapp_webhook_deliveries WHERE id = ?`, "legacy-delivery").Scan(
+		&legacyEvent, &legacyEndpoint, &secretRef, &permanent, &claimVersion); err != nil {
+		t.Fatal(err)
+	}
+	if legacyEvent.Valid || legacyEndpoint.Valid || secretRef != "" || permanent || claimVersion != 0 {
+		t.Fatalf("legacy defaults event=%v endpoint=%v secret=%q permanent=%v claim=%d",
+			legacyEvent, legacyEndpoint, secretRef, permanent, claimVersion)
+	}
 	if _, err := db.Exec(`INSERT INTO whatsapp_message_jobs
 		(process_id, message_job_id, cleanup_job_id, tenant_id, instance_id,
 		 instance_name, remote_jid, message_id,
@@ -145,26 +171,30 @@ func TestMigrationsRunThroughHesapeMigratorAndRollbackOwnedSchema(t *testing.T) 
 	if err != nil {
 		t.Fatalf("rollback latest migration batch: %v", err)
 	}
-	if !reflect.DeepEqual(rolledBack, []string{"20260825_0004_create_message_jobs"}) {
+	if !reflect.DeepEqual(rolledBack, []string{"20260825_0005_expand_webhook_deliveries"}) {
 		t.Fatalf("rolled back migrations = %v, want only the latest reversible migration", rolledBack)
 	}
-	if sqliteTableExists(t, db, "whatsapp_message_jobs") {
-		t.Fatal("official rollback left the message job schema behind")
+	if sqliteColumnExists(t, db, "whatsapp_webhook_deliveries", "event_id") {
+		t.Fatal("official rollback left the delivery expansion behind")
 	}
-	if !sqliteTableExists(t, db, "whatsapp_webhook_deliveries") || !sqliteTableExists(t, db, "whatsmeow_device") {
-		t.Fatal("rolling back message jobs crossed into an earlier or irreversible migration")
+	if !sqliteTableExists(t, db, "whatsapp_message_jobs") || !sqliteTableExists(t, db, "whatsapp_webhook_deliveries") || !sqliteTableExists(t, db, "whatsmeow_device") {
+		t.Fatal("rolling back the delivery expansion crossed into an earlier migration")
 	}
 	ran, err := repository.GetRan(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reflect.DeepEqual(ran, wantNames) || containsMigration(ran, "20260825_0004_create_message_jobs") {
-		t.Fatalf("migration tracking still contains rolled back message jobs: %v", ran)
+	if reflect.DeepEqual(ran, wantNames) || containsMigration(ran, "20260825_0005_expand_webhook_deliveries") {
+		t.Fatalf("migration tracking still contains rolled back delivery expansion: %v", ran)
 	}
 
 	migrationConnection, err := resolver.Connection("")
 	if err != nil {
 		t.Fatalf("resolve migration connection: %v", err)
+	}
+	messageJobsSchema := declared[3].(migrations.ReversibleMigration)
+	if err := messageJobsSchema.Down(ctx, migrationConnection); err != nil {
+		t.Fatalf("rollback %s: %v", messageJobsSchema.GetName(), err)
 	}
 	deliveriesSchema := declared[2].(migrations.ReversibleMigration)
 	if err := deliveriesSchema.Down(ctx, migrationConnection); err != nil {
@@ -182,6 +212,31 @@ func TestMigrationsRunThroughHesapeMigratorAndRollbackOwnedSchema(t *testing.T) 
 	}
 	if !sqliteTableExists(t, db, "whatsmeow_device") {
 		t.Fatal("rolling back the package-owned schema removed the upstream WhatsMeow schema")
+	}
+}
+
+func TestWebhookDeliveryExpansionRendersForPostgres(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:postgres-webhook-migration-render?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	connection := database.ForMigrations(database.NewConnection(db, "", "", map[string]any{
+		"driver": string(database.DialectPostgres), "name": migrationConnectionName,
+	}))
+	pretender := connection.(migrations.PretendingConnection)
+	migration := packagemigrations.Migrations(nil)[4]
+	statements, err := pretender.Pretend(context.Background(), func() error {
+		return migration.Up(context.Background(), connection)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.ToLower(strings.Join(statements, "\n"))
+	for _, fragment := range []string{`add column "event_id"`, `add column "claim_version"`, "whatsapp_webhook_deliveries_event_endpoint_uidx"} {
+		if !strings.Contains(joined, strings.ToLower(fragment)) {
+			t.Errorf("PostgreSQL SQL missing %q: %s", fragment, joined)
+		}
 	}
 }
 
@@ -261,4 +316,25 @@ func sqliteTableExists(t *testing.T, db *sql.DB, table string) bool {
 		t.Fatalf("inspect table %s: %v", table, err)
 	}
 	return count == 1
+}
+
+func sqliteColumnExists(t *testing.T, db *sql.DB, table, column string) bool {
+	t.Helper()
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sequence, notNull, primaryKey int
+		var name, kind string
+		var defaultValue any
+		if err := rows.Scan(&sequence, &name, &kind, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
 }
