@@ -20,6 +20,24 @@ has to name the symbol.
 
 ---
 
+## v0.4.3 — the Framework floor is 0.55
+
+Nothing in this package's own API moved: `apidiff` against `v0.4.2` reports no
+incompatible change. What moved is the minimum it compiles against, which
+`go.mod` and `arandu.mod.toml` now declare:
+
+| | was | is |
+|---|---|---|
+| `github.com/arandu-io/framework` | `v0.48.0` | `v0.55.1` |
+| `github.com/arandu-io/hesape` | `v0.42.2` | `v0.52.0` |
+| `golang.org/x/net` | `v0.58.0` | `v0.60.0` |
+
+An application below those upgrades them first, following the Framework and
+Hesape upgrade guides between the two versions: from Framework v0.55.0 the
+session is configured only by what the session store reads, and from v0.54.0 a
+boolean setting that does not read as one stops the boot. The `x/net` floor
+closes GO-2026-6611, GO-2026-6612 and GO-2026-6617.
+
 ## v0.4.2 — the Framework floor is 0.48
 
 Nothing in this package's own API moved. What moved is the minimum it compiles
