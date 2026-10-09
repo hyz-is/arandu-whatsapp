@@ -20,6 +20,20 @@ has to name the symbol.
 
 ---
 
+## v0.4.2 — the Framework floor is 0.48
+
+Nothing in this package's own API moved. What moved is the minimum it compiles
+against, which the dependency update after v0.4.1 raised in `go.mod` and
+`arandu.mod.toml` now declares:
+
+| | was | is |
+|---|---|---|
+| `github.com/arandu-io/framework` | `v0.47.1` | `v0.48.0` |
+| `github.com/arandu-io/hesape` | `v0.41.1` | `v0.42.2` |
+
+An application below those upgrades them first. `aru skills:sync` now offers
+`whatsapp-package` to a project that requires this version.
+
 ## Unreleased — the Framework floor is 0.45
 
 Nothing in this package's own API moved. `apidiff` against `v0.1.0` reports no

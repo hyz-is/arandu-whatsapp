@@ -48,7 +48,7 @@ the application that installs this package rather than here.
 
 ```toml
 name = "hyz-is/arandu-whatsapp"
-framework = ">= 0.47"
+framework = ">= 0.48"
 profiles = ["conventional"]
 
 [permissions]
