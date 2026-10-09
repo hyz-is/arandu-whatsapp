@@ -2,6 +2,8 @@
 name: whatsapp-package
 description: Install, wire and use the WhatsApp package (Go, Arandu) in an application. Use when the request is to install the module, register it, configure its 36 routes, publish Swagger/OpenAPI, open explicit role actions, diagnose 403 responses or apply its schema. Covers New(cfg, db, sessions), NewWithDocumentation, lifecycle ownership, typed configuration, Arandu sessions, default-deny Policy.Roles and aru migrate.
 license: MIT
+metadata:
+  audience: app
 ---
 
 # Using WhatsApp

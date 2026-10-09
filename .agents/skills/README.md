@@ -24,6 +24,11 @@ The last one has a different audience from the other three: it travels with the
 package so an assistant installing it has the explicit wiring, `aru migrate`,
 typed role policy and lifecycle requirements in front of it.
 
+Its frontmatter says so, under `metadata`, with `audience: app`. That line is
+what `aru skills:sync` reads to copy the skill into an application whose
+`go.mod` requires this package, and no other skill here carries it: an
+application that received the release procedure would follow it.
+
 ## Why these exist
 
 The audience of the first three is somebody changing the package. A model asked
