@@ -20,6 +20,24 @@ has to name the symbol.
 
 ---
 
+## v0.4.4 — Arandu Swagger 0.4
+
+Nothing in this package's own API moved: `apidiff` against `v0.4.3` reports no
+incompatible change. `go.mod` now requires `github.com/hyz-is/arandu-swagger`
+`v0.4.2`, was `v0.3.1`. The Framework floor stays at 0.55.
+
+```bash
+go get github.com/hyz-is/arandu-swagger@v0.4.2
+```
+
+Swagger's own API between the two versions only gained symbols, so the
+`swagger.Config` in `bootstrap/app.go` compiles as written. Two things an
+application sees at run time: the generated document declares
+`https://spec.openapis.org/oas/3.1/dialect/base` as its `jsonSchemaDialect`
+unless `Config.JSONSchemaDialect` names another, and the UI route first renders
+the application's `docs.swagger` view, falling back to the embedded page when
+the application has none.
+
 ## v0.4.3 — the Framework floor is 0.55
 
 Nothing in this package's own API moved: `apidiff` against `v0.4.2` reports no
