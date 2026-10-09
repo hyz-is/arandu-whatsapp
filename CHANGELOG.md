@@ -1,5 +1,9 @@
 # Release Notes
 
+## [v0.4.3](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.2...v0.4.3) - 2026-10-09
+
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.2...v0.4.3
+
 ## [v0.4.2](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.1...v0.4.2) - 2026-10-09
 
 ## What's Changed
