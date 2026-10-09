@@ -1,5 +1,15 @@
 # Release Notes
 
+## [v0.4.2](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.1...v0.4.2) - 2026-10-09
+
+## What's Changed
+* build(deps): bump the gomod group across 1 directory with 4 updates by @dependabot[bot] in https://github.com/hyz-is/arandu-whatsapp/pull/8
+
+## New Contributors
+* @dependabot[bot] made their first contribution in https://github.com/hyz-is/arandu-whatsapp/pull/8
+
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.1...v0.4.2
+
 ## [v0.4.1](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.0...v0.4.1) - 2026-09-17
 
 **Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.0...v0.4.1
