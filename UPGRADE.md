@@ -20,6 +20,30 @@ has to name the symbol.
 
 ---
 
+## v0.4.5 — the Framework floor is 0.56
+
+Nothing in this package's own API moved: `apidiff` against `v0.4.4` reports no
+incompatible change. What moved is the minimum it compiles against, which
+`go.mod` and `arandu.mod.toml` now declare:
+
+| | was | is |
+|---|---|---|
+| `github.com/arandu-io/framework` | `v0.55.1` | `v0.56.0` |
+| `github.com/arandu-io/hesape` | `v0.52.0` | `v0.54.0` |
+
+```bash
+go get github.com/arandu-io/framework@v0.56.0 github.com/arandu-io/hesape@v0.54.0
+```
+
+An application below those upgrades them first, following the Framework and
+Hesape upgrade guides between the two versions. The one incompatible change
+upstream is in the Framework `config` bridge: `config.Config.SessionTTL` is
+removed and `config.Load` no longer reads `SESSION_TTL`, so an application
+that built its session store from it builds the store from
+`bootstrap.LoadConfiguration` and `SESSION_LIFETIME`, in minutes. Every page
+drawn through `view.New` now carries `APP_NAME` without being passed it; this
+package draws no page, so nothing here changes with it.
+
 ## v0.4.4 — Arandu Swagger 0.4
 
 Nothing in this package's own API moved: `apidiff` against `v0.4.3` reports no
