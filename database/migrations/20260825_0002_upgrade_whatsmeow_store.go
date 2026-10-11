@@ -71,3 +71,13 @@ func (m upgradeWhatsMeowStore) Up(ctx context.Context, conn hesapemigrations.Con
 }
 
 var _ foundation.Migration = upgradeWhatsMeowStore{}
+
+// Irreversible says why a rollback leaves the WhatsMeow store as it is: the
+// schema is WhatsMeow's, which publishes upgrades and no downgrade. A rollback
+// of the module's own tables proceeds around it, and applying this again
+// later is a no-op on a store already at its version.
+func (upgradeWhatsMeowStore) Irreversible() string {
+	return "WhatsMeow owns its store schema and publishes no downgrade"
+}
+
+var _ hesapemigrations.IrreversibleMigration = upgradeWhatsMeowStore{}

@@ -338,3 +338,11 @@ func sqliteColumnExists(t *testing.T, db *sql.DB, table, column string) bool {
 	}
 	return false
 }
+
+func TestTheWhatsMeowMigrationDeclaresItCannotBeUndone(t *testing.T) {
+	migration := packagemigrations.Migrations(nil)[1]
+	irreversible, ok := migration.(migrations.IrreversibleMigration)
+	if !ok || irreversible.Irreversible() == "" {
+		t.Fatal("the WhatsMeow migration declares neither Down nor Irreversible, so every rollback of an application that installs the module stops on it")
+	}
+}
