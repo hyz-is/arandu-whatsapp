@@ -2,6 +2,10 @@
 
 ## [v0.6.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.5.0...v0.6.0) - 2026-10-11
 
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.5.0...v0.6.0
+
+## [v0.6.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.5.0...v0.6.0) - 2026-10-11
+
 ### Added
 - `PolicyConfig.Actions`: actions decided by the subject's own actions. A
   subject that carries a listed action may take it, for applications whose
