@@ -92,6 +92,7 @@ type InstanceRepository interface {
 	ListPage(ctx context.Context, grant security.Grant, query data.Query, name *string) (database.Page[types.InstanceRecord], error)
 	FetchDetailsByName(ctx context.Context, grant security.Grant, name string) (types.InstanceDetails, error)
 	FindAutoConnectInstances(ctx context.Context, grant security.Grant) ([]types.Instance, error)
+	FindAutoConnectTenants(ctx context.Context, grant security.Grant) ([]string, error)
 	Update(ctx context.Context, grant security.Grant, instanceID int64, input types.UpdateInstanceInput) (types.InstanceRecord, error)
 	UpdateStatus(ctx context.Context, grant security.Grant, instanceID int64, status types.InstanceStatus) error
 	UpdateConnectionState(ctx context.Context, grant security.Grant, input types.UpdateConnectionStateInput) error

@@ -452,9 +452,12 @@ func (s *Service) authorizedInstance(ctx context.Context, actor security.Subject
 	return grant, instance, nil
 }
 
+// checkTenant refuses a subject with no tenant. Which tenant's instance a
+// subject may reach is the policy's decision, made against the instance's own
+// tenant: the module hosts every tenant of the application.
 func (s *Service) checkTenant(actor security.Subject) error {
-	if actor.Tenant == "" || actor.Tenant != s.tenant {
-		return fmt.Errorf("%w: subject is outside the WhatsApp module tenant", security.ErrForbidden)
+	if actor.Tenant == "" {
+		return fmt.Errorf("%w: subject has no tenant", security.ErrForbidden)
 	}
 	return nil
 }

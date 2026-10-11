@@ -64,6 +64,10 @@ const (
 // ActionRuntime identifies the internal permission used by background work.
 const ActionRuntime security.Action = enums.ActionRuntime
 
+// ActionRuntimeDiscover identifies the internal permission the boot restore
+// uses to list which tenants have instances to reconnect.
+const ActionRuntimeDiscover security.Action = enums.ActionRuntimeDiscover
+
 // Actions is a snapshot of the complete public permission vocabulary.
 var Actions = append([]security.Action(nil), enums.Actions...)
 
@@ -112,9 +116,12 @@ const (
 // package never reads environment variables; the host application owns that
 // translation and passes the result here.
 type Config struct {
-	// Tenant is the complete runtime scope of this module instance. Requests
-	// carrying a different tenant are refused before authorization or SQL, and
-	// all reconnect/webhook background work uses this tenant.
+	// Tenant is the realm a visitor with no session is read as, and the tenant
+	// the boot discovery runs under. It does not limit which tenants the module
+	// serves: one registration hosts every tenant of the application, the
+	// policy compares each instance's tenant with the subject's, and every
+	// instance is reconnected, persisted and dispatched under a runtime Grant
+	// of its own tenant.
 	Tenant string
 	// Prefix is the absolute path under which the module mounts its routes.
 	Prefix string

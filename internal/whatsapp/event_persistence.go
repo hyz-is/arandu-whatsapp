@@ -47,6 +47,34 @@ type EventPersistenceService struct {
 	instances      webhookInstanceFinder
 	webhooks       webhooksvc.WebhookManager
 	normalizer     MessageEventNormalizer
+	inbound        []InboundHandler
+}
+
+// InboundHandler is told about a message once it is persisted, with the
+// runtime Grant of the instance it arrived on -- so the tenant it belongs to
+// is the Grant's and nobody else's.
+type InboundHandler func(ctx context.Context, grant security.Grant, instanceName string, message dbtypes.CreateMessageInput)
+
+// AddInboundHandler registers a handler. It is called during wiring, before
+// any instance runs.
+func (s *EventPersistenceService) AddInboundHandler(fn InboundHandler) {
+	if fn != nil {
+		s.inbound = append(s.inbound, fn)
+	}
+}
+
+func (s *EventPersistenceService) tellInbound(ctx context.Context, managed *ManagedWhatsAppClient, message dbtypes.CreateMessageInput) {
+	for _, fn := range s.inbound {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					hlog.For(ctx).ErrorContext(ctx, "inbound handler panicked",
+						"component", "event_persistence", "instance_name", managed.InstanceName, "panic", r)
+				}
+			}()
+			fn(ctx, managed.RuntimeGrant, managed.InstanceName, message)
+		}()
+	}
 }
 
 type webhookInstanceFinder interface {
@@ -109,6 +137,7 @@ func (s *EventPersistenceService) HandleMessage(ctx context.Context, managed *Ma
 			"component", "event_persistence", "instance_name", managed.InstanceName,
 			"message_key_id", message.KeyID, "message_type", message.MessageType)
 		s.dispatchMessageUpsertWebhook(ctx, managed, message.KeyID)
+		s.tellInbound(ctx, managed, message)
 	}
 }
 

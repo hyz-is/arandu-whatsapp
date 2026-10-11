@@ -183,10 +183,23 @@ aru queue:work --queue=whatsapp-messages --workers=N
 The policy is default-deny. Only actions present in `Policy.Roles` are opened;
 unknown and newly added actions stay closed.
 
-`Config.Tenant` is the complete runtime scope of one module registration. The
-module refuses sessions from another tenant before authorization or SQL so that
-WhatsApp callbacks, reconnection and durable jobs cannot cross tenant
-boundaries. Register the package in a tenant-scoped Arandu application.
+One registration hosts every tenant of the application. Each instance belongs
+to the tenant of the Grant that created it, and everything it does afterwards --
+pairing, reconnecting, persisting inbound events, dispatching webhooks, running
+queued jobs -- runs under a runtime Grant of that tenant. At boot, `Start`
+discovers which tenants have paired instances (the only read that crosses
+tenants, and it answers tenant identifiers only) and restores each one under its
+own Grant. `Config.Tenant` is the guest realm and the tenant that discovery runs
+under; a subject with no tenant is refused before authorization or SQL.
+
+To be told about inbound messages in process, register a listener before
+`Start`:
+
+```go
+whatsappModule.OnInbound(func(ctx context.Context, g security.Grant, m whatsapp.InboundMessage) {
+	// data.Tenant(g) is the organization the message belongs to.
+})
+```
 
 This package declares four ordered Foundation migrations: three reversible
 package schemas and the upstream WhatsMeow store upgrade. They are exposed
@@ -198,7 +211,7 @@ migrations.
 
 | field | required | meaning |
 | --- | --- | --- |
-| `Tenant` | yes | tenant owned by this module registration and guest fallback. |
+| `Tenant` | yes | guest realm and the tenant boot discovery runs under; the module serves every tenant. |
 | `Prefix` | no | where the routes are mounted. Defaults to `/whatsapp`. |
 | `WhatsApp` | no | pairing, device identity, reconnect and address-cache settings. |
 | `Persistence` | no | enables persistence of messages, updates and contacts. |
@@ -275,8 +288,8 @@ expressible. Every method opens with `g.Check`, which proves the Grant was
 issued for that exact action rather than for another one.
 
 **The tenant comes from `data.Tenant(g)`.** Never from the path, body, query or
-header. The service also verifies that the session tenant matches the configured
-runtime scope before authorization or SQL.
+header. The service also refuses a subject with no tenant before authorization
+or SQL.
 
 **`arandu.mod.toml` declares what the package does** — network, filesystem,
 exec, migrations — and `aru doctor` compares the declaration against the
@@ -287,8 +300,8 @@ request while declaring `network = false` is rejected.
 
 - `New` validates and assembles collaborators without I/O or goroutines.
 - `Boot` configures the process-wide WhatsMeow device descriptor.
-- `Start` verifies schema state and restores configured-tenant connections
-  asynchronously.
+- `Start` verifies schema state, discovers the tenants with paired instances
+  and restores each tenant's connections under its own Grant, asynchronously.
 - `Health` checks the borrowed database and connection-restore result.
 - `Close` stops module-owned work and disconnects managed clients. The host
   application owns all native queue workers.

@@ -242,8 +242,10 @@ func (m *Module) Start(ctx context.Context) error {
 	}
 
 	lifecycle, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	//arandu:system-grant module startup owns tenant-scoped runtime work
-	runtimeGrant := security.SystemGrant(ActionRuntime, m.cfg.Tenant)
+	// Discovery reads which tenants have instances to reconnect, and nothing
+	// else; each one is restored under its own runtime Grant (RestoreAll).
+	//arandu:system-grant module startup lists the tenants whose paired instances it reconnects
+	runtimeGrant := security.SystemGrant(ActionRuntimeDiscover, m.cfg.Tenant)
 
 	m.lifecycle = lifecycle
 	m.cancel = cancel
@@ -276,7 +278,7 @@ func (m *Module) verifyWhatsMeowSchema(ctx context.Context) error {
 
 func (m *Module) restore(ctx context.Context, grant security.Grant, done chan struct{}) {
 	defer close(done)
-	err := m.connections.Restore(ctx, grant)
+	err := m.connections.RestoreAll(ctx, grant)
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}

@@ -60,6 +60,10 @@ const (
 // ActionRuntime identifies the internal permission used by background work.
 const ActionRuntime security.Action = authz.ActionRuntime
 
+// ActionRuntimeDiscover is the boot restore's read of which tenants have
+// instances to reconnect.
+const ActionRuntimeDiscover security.Action = authz.ActionRuntimeDiscover
+
 var publicActions = [...]security.Action{
 	ActionInstanceCreate, ActionInstanceList, ActionInstanceView, ActionInstanceUpdate, ActionInstanceDelete,
 	ActionConnectionPair, ActionConnectionView, ActionConnectionLogout,

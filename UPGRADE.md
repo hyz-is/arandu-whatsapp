@@ -7,6 +7,17 @@ Additions are not listed. A new symbol breaks nothing, and a file that named
 every one of them would be a changelog nobody reads to find the two lines that
 matter.
 
+
+## Unreleased (multi-tenant)
+
+- An application that registered one module per tenant can register one. A
+  subject from any tenant reaches the instances of its own tenant; nothing
+  else changes in the policy configuration.
+- `Config.Tenant` stays required and keeps its validation. It is now the guest
+  realm and the tenant the boot discovery runs under, not a gate.
+- To receive inbound messages without a webhook, call `OnInbound` after `New`
+  and before `Start`.
+
 ## Before v1.0.0
 
 While the version starts with `v0.`, the API can break. That is what `v0.`

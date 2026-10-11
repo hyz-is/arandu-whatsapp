@@ -88,7 +88,7 @@ func TestRepositoryRejectsInvalidGrantsBeforeDatabaseAccess(t *testing.T) {
 	}
 }
 
-func TestModuleRefusesSubjectOutsideConfiguredTenantBeforeDatabase(t *testing.T) {
+func TestModuleRefusesSubjectWithoutTenantBeforeDatabase(t *testing.T) {
 	t.Parallel()
 	sessions := security.NewSessionStore([]byte("0123456789abcdef0123456789abcdef"), time.Hour, false, security.NewMemoryBackend())
 	module, err := whatsapp.New(whatsapp.Config{
@@ -100,8 +100,8 @@ func TestModuleRefusesSubjectOutsideConfiguredTenantBeforeDatabase(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := module.Service().ListInstances(context.Background(), administrator("globex"), whatsapp.InstanceListQuery{}); !errors.Is(err, security.ErrForbidden) {
-		t.Fatalf("cross-tenant subject reached the module: %v", err)
+	if _, err := module.Service().ListInstances(context.Background(), administrator(""), whatsapp.InstanceListQuery{}); !errors.Is(err, security.ErrForbidden) {
+		t.Fatalf("a subject with no tenant reached the module: %v", err)
 	}
 }
 

@@ -1,5 +1,21 @@
 # Release Notes
 
+## Unreleased
+
+### Added
+- One registration hosts every tenant of the application. `Start` discovers the
+  tenants with paired online instances (`ActionRuntimeDiscover`) and restores
+  each one under a runtime Grant of that tenant.
+- `Module.OnInbound` and `InboundMessage`: an in-process listener told about
+  every persisted inbound message with the runtime Grant of its tenant.
+
+### Changed
+- A subject is no longer refused for carrying a tenant other than
+  `Config.Tenant`; the policy decides against the instance's tenant. A subject
+  with no tenant is still refused before authorization or SQL.
+- Restored instances run under the module's lifecycle context, so `Close`
+  stops them the same way as paired ones.
+
 ## [v0.4.5](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.4...v0.4.5) - 2026-10-10
 
 **Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.4...v0.4.5

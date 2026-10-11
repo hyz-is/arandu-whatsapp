@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/security"
 	waConsumerApplication "go.mau.fi/whatsmeow/proto/waConsumerApplication"
 	wae2e "go.mau.fi/whatsmeow/proto/waE2E"
@@ -591,4 +592,35 @@ func (f fakePersistenceInstanceFinder) FindByName(context.Context, security.Gran
 		return dbtypes.InstanceRecord{}, f.err
 	}
 	return f.instance, nil
+}
+
+func TestHandleMessageTellsInboundHandlersAfterPersistingUnderTheRuntimeGrant(t *testing.T) {
+	messages := &fakePersistenceMessages{findResults: []findMessageResult{{message: dbtypes.Message{ID: 9, KeyID: "msg-1"}}}}
+	service := NewEventPersistenceService(EventPersistenceConfig{SaveDataNewMessage: true}, messages, &fakePersistenceMessageUpdates{}, &fakePersistenceContacts{})
+	service.SetWebhookDispatcher(fakeInstanceFinder(), &fakePersistenceWebhooks{})
+	var told []string
+	var tenant string
+	service.AddInboundHandler(func(_ context.Context, grant security.Grant, instanceName string, message dbtypes.CreateMessageInput) {
+		told = append(told, instanceName+"/"+message.KeyID)
+		tenant = data.Tenant(grant)
+	})
+	service.AddInboundHandler(func(context.Context, security.Grant, string, dbtypes.CreateMessageInput) {
+		panic("a broken handler")
+	})
+
+	managed := eventManagedClient()
+	service.HandleMessage(context.Background(), managed, textEvent("msg-1"))
+
+	if len(told) != 1 || told[0] != managed.InstanceName+"/msg-1" {
+		t.Fatalf("the handler was told %v", told)
+	}
+	if tenant != data.Tenant(managed.RuntimeGrant) {
+		t.Fatalf("the handler ran under tenant %q, want the instance's %q", tenant, data.Tenant(managed.RuntimeGrant))
+	}
+
+	failing := NewEventPersistenceService(EventPersistenceConfig{SaveDataNewMessage: true}, &fakePersistenceMessages{createErr: errors.New("database down")}, &fakePersistenceMessageUpdates{}, &fakePersistenceContacts{})
+	failing.AddInboundHandler(func(context.Context, security.Grant, string, dbtypes.CreateMessageInput) {
+		t.Fatal("a handler was told about a message that was not persisted")
+	})
+	failing.HandleMessage(context.Background(), managed, textEvent("msg-2"))
 }

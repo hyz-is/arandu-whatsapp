@@ -43,6 +43,10 @@ const (
 	ActionGroupLeave             security.Action = "whatsapp.group.leave"
 
 	ActionRuntime security.Action = "whatsapp.runtime"
+	// ActionRuntimeDiscover lists which tenants have instances to reconnect at
+	// boot. It reads tenant identifiers and nothing else, across tenants, so
+	// the restore of each one runs under a runtime Grant of that tenant.
+	ActionRuntimeDiscover security.Action = "whatsapp.runtime.discover"
 )
 
 // CheckInstanceLookup accepts only actions whose service flow must load an

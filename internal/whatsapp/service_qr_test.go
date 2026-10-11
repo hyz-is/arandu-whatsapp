@@ -309,6 +309,9 @@ func (r *fakeInstanceRepository) FetchDetailsByName(context.Context, security.Gr
 func (r *fakeInstanceRepository) FindAutoConnectInstances(context.Context, security.Grant) ([]types.Instance, error) {
 	return nil, nil
 }
+func (r *fakeInstanceRepository) FindAutoConnectTenants(context.Context, security.Grant) ([]string, error) {
+	return nil, nil
+}
 func (r *fakeInstanceRepository) Update(context.Context, security.Grant, int64, types.UpdateInstanceInput) (types.InstanceRecord, error) {
 	return types.InstanceRecord{}, nil
 }

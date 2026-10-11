@@ -301,6 +301,35 @@ func (r *SQLInstanceRepository) FetchDetailsByName(ctx context.Context, grant se
 	return detail, nil
 }
 
+// FindAutoConnectTenants lists the tenants that have an online instance with a
+// paired device. It is the one read that crosses tenants, and it answers
+// tenant identifiers only: what each tenant has is read afterwards under that
+// tenant's own runtime Grant.
+func (r *SQLInstanceRepository) FindAutoConnectTenants(ctx context.Context, grant security.Grant) ([]string, error) {
+	if err := grant.Check(authz.ActionRuntimeDiscover); err != nil {
+		return nil, err
+	}
+	rows, err := r.base.db.QueryContext(ctx, `SELECT DISTINCT i.tenant_id
+		FROM whatsapp_instances i
+		JOIN whatsapp_instance_connections c
+		  ON c.tenant_id = i.tenant_id AND c.instance_id = i.id
+		WHERE i.status = ? AND c.whatsapp_device_jid IS NOT NULL
+		ORDER BY i.tenant_id`, types.InstanceStatusOnline)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants with reconnectable whatsapp instances: %w", err)
+	}
+	defer rows.Close()
+	var tenants []string
+	for rows.Next() {
+		var tenant string
+		if err := rows.Scan(&tenant); err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, tenant)
+	}
+	return tenants, rows.Err()
+}
+
 func (r *SQLInstanceRepository) FindAutoConnectInstances(ctx context.Context, grant security.Grant) ([]types.Instance, error) {
 	if err := grant.Check(authz.ActionRuntime); err != nil {
 		return nil, err

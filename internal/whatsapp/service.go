@@ -520,6 +520,40 @@ func (s *Service) Restore(ctx context.Context, grant security.Grant) error {
 	return nil
 }
 
+// RestoreAll reconnects the instances of every tenant that has one to
+// reconnect. The discovery Grant reads tenant identifiers only; each tenant's
+// instances are restored under a runtime Grant of that tenant, so nothing a
+// reconnected client writes can land in another tenant.
+func (s *Service) RestoreAll(ctx context.Context, discover security.Grant) error {
+	if !s.config.AutoReconnect {
+		return nil
+	}
+	tenants, err := s.instances.FindAutoConnectTenants(ctx, discover)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, tenant := range tenants {
+		//arandu:system-grant the boot restore of one tenant's paired instances, named by the discovery read
+		grant := security.SystemGrant(authz.ActionRuntime, tenant)
+		if err := s.Restore(ctx, grant); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			errs = append(errs, fmt.Errorf("tenant %s: %w", tenant, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// AddInboundHandler registers a handler told about every persisted inbound
+// message, with its tenant's runtime Grant.
+func (s *Service) AddInboundHandler(fn InboundHandler) {
+	if s.events != nil {
+		s.events.AddInboundHandler(fn)
+	}
+}
+
 func (s *Service) Shutdown(ctx context.Context) error {
 	if s.appCancel != nil {
 		s.appCancel()
@@ -572,7 +606,11 @@ func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item typ
 		})
 		return err
 	}
-	instanceCtx, instanceCancel := context.WithCancel(context.Background())
+	restoreParentCtx := s.appCtx
+	if restoreParentCtx == nil {
+		restoreParentCtx = context.Background()
+	}
+	instanceCtx, instanceCancel := context.WithCancel(restoreParentCtx)
 	connectCtx, connectCancel := context.WithTimeout(instanceCtx, s.config.ConnectTimeout)
 	defer connectCancel()
 	managed := s.newManagedClient(item, client, grant, instanceCtx, instanceCancel)

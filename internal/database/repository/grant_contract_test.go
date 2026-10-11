@@ -43,6 +43,7 @@ func TestEverySQLDoorRejectsInvalidGrantBeforeDatabaseAccess(t *testing.T) {
 		}},
 		{name: "instances/fetch-details", allowedAction: authz.ActionInstanceView, call: func(g security.Grant) error { _, err := instances.FetchDetailsByName(ctx, g, "instance"); return err }},
 		{name: "instances/find-auto-connect", allowedAction: authz.ActionRuntime, call: func(g security.Grant) error { _, err := instances.FindAutoConnectInstances(ctx, g); return err }},
+		{name: "instances/find-auto-connect-tenants", allowedAction: authz.ActionRuntimeDiscover, call: func(g security.Grant) error { _, err := instances.FindAutoConnectTenants(ctx, g); return err }},
 		{name: "instances/update", allowedAction: authz.ActionInstanceUpdate, call: func(g security.Grant) error {
 			_, err := instances.Update(ctx, g, 1, types.UpdateInstanceInput{})
 			return err
