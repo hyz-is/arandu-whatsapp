@@ -2,6 +2,10 @@
 
 ## [v0.5.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.5...v0.5.0) - 2026-10-11
 
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.5...v0.5.0
+
+## [v0.5.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.5...v0.5.0) - 2026-10-11
+
 ### Added
 - One registration hosts every tenant of the application. `Start` discovers the
   tenants with paired online instances (`ActionRuntimeDiscover`) and restores
