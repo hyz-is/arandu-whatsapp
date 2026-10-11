@@ -8,7 +8,7 @@ every one of them would be a changelog nobody reads to find the two lines that
 matter.
 
 
-## Unreleased (multi-tenant)
+## v0.5.0 (multi-tenant)
 
 - An application that registered one module per tenant can register one. A
   subject from any tenant reaches the instances of its own tenant; nothing
