@@ -1,5 +1,15 @@
 # Release Notes
 
+## [v0.6.3](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.2...v0.6.3) - 2026-10-11
+
+### Fixed
+- `ConnectQRCode` called while the instance is already pairing now answers
+  the QR code the pairing shows at that moment (`Count`, `Code`, `Base64`,
+  status `qrcode`), alongside `AlreadyConnecting`. It answered connecting with
+  no image, so a screen could only show the first code, which WhatsApp
+  replaces after about twenty seconds: polling now keeps up with the rotation
+  until the phone scans it.
+
 ## [v0.6.2](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.1...v0.6.2) - 2026-10-11
 
 **Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.1...v0.6.2

@@ -150,11 +150,7 @@ func (s *Service) ConnectQRCode(ctx context.Context, grant security.Grant, insta
 		return QRCodeConnectionResult{}, err
 	}
 	if !locked {
-		return QRCodeConnectionResult{
-			InstanceName:      instance.Instance.Name,
-			ConnectionStatus:  string(types.InstanceConnectionStatusConnecting),
-			AlreadyConnecting: true,
-		}, nil
+		return s.pairingInProgress(instanceID, instance.Instance.Name), nil
 	}
 	lockHeld := true
 	defer func() {
@@ -176,11 +172,7 @@ func (s *Service) ConnectQRCode(ctx context.Context, grant security.Grant, insta
 	}
 
 	if s.pairings.exists(instanceID) {
-		return QRCodeConnectionResult{
-			InstanceName:      instance.Instance.Name,
-			ConnectionStatus:  string(types.InstanceConnectionStatusConnecting),
-			AlreadyConnecting: true,
-		}, nil
+		return s.pairingInProgress(instanceID, instance.Instance.Name), nil
 	}
 
 	if err := s.hub.Reserve(instanceID, instance.Instance.Name); err != nil {
@@ -1594,6 +1586,26 @@ func (s *Service) consumeQRCodeChannel(
 			}
 		}
 	}
+}
+
+// pairingInProgress answers a connect call for an instance that is already
+// pairing. WhatsApp rotates the QR code every few seconds while it waits for
+// the phone, and the pairing session keeps the one it shows now; returning it
+// is what lets a screen poll and keep up with the rotation instead of showing
+// the first code until it expires.
+func (s *Service) pairingInProgress(instanceID, name string) QRCodeConnectionResult {
+	result := QRCodeConnectionResult{
+		InstanceName:      name,
+		ConnectionStatus:  string(types.InstanceConnectionStatusConnecting),
+		AlreadyConnecting: true,
+	}
+	if session, ok := s.pairings.get(instanceID); ok {
+		if qr := session.getCurrentQR(); qr != nil {
+			result.Count, result.Code, result.Base64 = qr.Count, qr.Code, qr.Base64
+			result.ConnectionStatus = string(types.InstanceConnectionStatusQRCode)
+		}
+	}
+	return result
 }
 
 func (s *Service) handleQRCodeItem(instanceID int64, managed *ManagedWhatsAppClient, session *pairingSession, item whatsmeow.QRChannelItem, count int) (QRCodeConnectionResult, error) {
