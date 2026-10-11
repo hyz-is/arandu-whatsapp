@@ -1,5 +1,13 @@
 # Release Notes
 
+## [v0.6.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.5.0...v0.6.0) - 2026-10-11
+
+### Added
+- `PolicyConfig.Actions`: actions decided by the subject's own actions. A
+  subject that carries a listed action may take it, for applications whose
+  permission groups fill the subject's actions (arandu-permission) rather than
+  its roles. Roles work as before, and an action in neither list stays closed.
+
 ## [v0.5.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.5...v0.5.0) - 2026-10-11
 
 **Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.4.5...v0.5.0

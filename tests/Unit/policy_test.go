@@ -129,3 +129,27 @@ func TestConfigurationValidationAndDefaults(t *testing.T) {
 		t.Fatalf("valid config was refused: %v", err)
 	}
 }
+
+func TestAnActionListedInPolicyActionsIsDecidedByTheSubjectsOwnActions(t *testing.T) {
+	t.Parallel()
+	policy := whatsapp.NewInstancePolicy(whatsapp.PolicyConfig{Actions: []security.Action{whatsapp.ActionInstanceList}})
+	carrying := security.Subject{ID: "u1", Tenant: "acme", Actions: []security.Action{whatsapp.ActionInstanceList, whatsapp.ActionInstanceDelete}}
+	if err := policy.Can(context.Background(), carrying, whatsapp.ActionInstanceList, whatsapp.Instance{TenantID: "acme"}); err != nil {
+		t.Fatalf("a subject carrying a listed action was refused: %v", err)
+	}
+	if err := policy.Can(context.Background(), carrying, whatsapp.ActionInstanceDelete, whatsapp.Instance{TenantID: "acme"}); err == nil {
+		t.Fatal("an action the configuration does not list was allowed because the subject carries it")
+	}
+	without := security.Subject{ID: "u2", Tenant: "acme"}
+	if err := policy.Can(context.Background(), without, whatsapp.ActionInstanceList, whatsapp.Instance{TenantID: "acme"}); err == nil {
+		t.Fatal("a listed action was allowed to a subject that does not carry it")
+	}
+	if err := policy.Can(context.Background(), carrying, whatsapp.ActionInstanceList, whatsapp.Instance{TenantID: "globex"}); err == nil {
+		t.Fatal("a carried action reached another tenant's instance")
+	}
+	guest := security.Guest("acme")
+	guest.Actions = []security.Action{whatsapp.ActionInstanceList}
+	if err := policy.Can(context.Background(), guest, whatsapp.ActionInstanceList, whatsapp.Instance{TenantID: "acme"}); err == nil {
+		t.Fatal("a guest carrying the action was allowed")
+	}
+}

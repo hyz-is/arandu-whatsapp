@@ -180,8 +180,11 @@ aru queue:work --queue=whatsapp-webhooks --workers=N
 aru queue:work --queue=whatsapp-messages --workers=N
 ```
 
-The policy is default-deny. Only actions present in `Policy.Roles` are opened;
-unknown and newly added actions stay closed.
+The policy is default-deny. Only actions present in `Policy.Roles` or
+`Policy.Actions` are opened; unknown and newly added actions stay closed.
+`Policy.Roles` opens an action to subjects with a role; `Policy.Actions` opens
+it to subjects that carry that very action, which is how an application whose
+permission groups are arandu-permission's grants it.
 
 One registration hosts every tenant of the application. Each instance belongs
 to the tenant of the Grant that created it, and everything it does afterwards --

@@ -63,6 +63,12 @@ type Config struct {
 type PolicyConfig struct {
 	// Roles lists the roles allowed for each action. Missing actions are denied.
 	Roles map[security.Action][]string
+	// Actions lists the actions a subject may take when it carries that very
+	// action, for an application whose permission groups fill the subject's
+	// actions (arandu-permission) rather than its roles. Listing an action here
+	// opens it to exactly the subjects whose groups grant it; an action in
+	// neither list stays closed.
+	Actions []security.Action
 }
 
 // WhatsAppConfig controls device identity, pairing, reconnect and address

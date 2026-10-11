@@ -12,16 +12,25 @@ import (
 )
 
 // InstancePolicy protects every operation on WhatsApp instances and their
-// children. No role is enabled unless config.PolicyConfig explicitly lists it.
-type InstancePolicy struct{ roles map[security.Action][]string }
+// children. No role or action is enabled unless config.PolicyConfig explicitly
+// lists it.
+type InstancePolicy struct {
+	roles   map[security.Action][]string
+	actions map[security.Action]bool
+}
 
-// NewInstancePolicy builds a default-deny policy from typed role mappings.
+// NewInstancePolicy builds a default-deny policy from typed role mappings and
+// the actions decided by the subject's own actions.
 func NewInstancePolicy(cfg config.PolicyConfig) InstancePolicy {
 	roles := make(map[security.Action][]string, len(cfg.Roles))
 	for action, allowed := range cfg.Roles {
 		roles[action] = append([]string(nil), allowed...)
 	}
-	return InstancePolicy{roles: roles}
+	actions := make(map[security.Action]bool, len(cfg.Actions))
+	for _, action := range cfg.Actions {
+		actions[action] = true
+	}
+	return InstancePolicy{roles: roles, actions: actions}
 }
 
 var _ security.Policy[models.Instance] = InstancePolicy{}
@@ -36,5 +45,8 @@ func (p InstancePolicy) Can(_ context.Context, subject security.Subject, action 
 			return nil
 		}
 	}
-	return fmt.Errorf("no configured role allows %s", action)
+	if p.actions[action] && !subject.IsGuest() && subject.Can(action) {
+		return nil
+	}
+	return fmt.Errorf("no configured role or action allows %s", action)
 }
