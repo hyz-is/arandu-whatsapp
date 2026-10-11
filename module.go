@@ -50,7 +50,6 @@ type Module struct {
 	webhookManager    *webhooksvc.Manager
 	messageProcessor  *message.MessageProcessingManager
 	connections       *internalwhatsapp.Service
-	whatsMeowUpgrader packagemigrations.SchemaUpgrader
 
 	mu          sync.RWMutex
 	lifecycle   context.Context
@@ -178,7 +177,6 @@ func newModule(cfg Config, db *data.DB, sessions *security.SessionStore, docs sw
 		controller:       controller,
 		webhookManager:   webhookManager,
 		messageProcessor: processor, connections: connections,
-		whatsMeowUpgrader: clientFactory.Store(),
 	}, nil
 }
 
@@ -340,7 +338,9 @@ func (m *Module) Close(ctx context.Context) error {
 // WhatsMeow store schema to its upstream container. They are never applied by
 // New, Boot or Start.
 func (m *Module) Migrations() []foundation.Migration {
-	return packagemigrations.Migrations(m.whatsMeowUpgrader)
+	// No upgrader is carried: the WhatsMeow migration opens the store over the
+	// migrator's handle, so every module registers the same value.
+	return packagemigrations.Migrations(nil)
 }
 
 // Routes registers the module's canonical named HTTP surface.
