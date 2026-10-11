@@ -44,12 +44,12 @@ type Module struct {
 	logger   *slog.Logger
 	docs     swagger.Documenter
 
-	service           *services.Service
-	publicService     *Service
-	controller        *controllers.WhatsAppController
-	webhookManager    *webhooksvc.Manager
-	messageProcessor  *message.MessageProcessingManager
-	connections       *internalwhatsapp.Service
+	service          *services.Service
+	publicService    *Service
+	controller       *controllers.WhatsAppController
+	webhookManager   *webhooksvc.Manager
+	messageProcessor *message.MessageProcessingManager
+	connections      *internalwhatsapp.Service
 
 	mu          sync.RWMutex
 	lifecycle   context.Context
