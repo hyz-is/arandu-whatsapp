@@ -2,6 +2,10 @@
 
 ## [v0.6.1](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.0...v0.6.1) - 2026-10-11
 
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.0...v0.6.1
+
+## [v0.6.1](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.0...v0.6.1) - 2026-10-11
+
 ### Fixed
 - A process that builds the module more than once -- an application whose
   tests boot it again -- no longer panics registering
