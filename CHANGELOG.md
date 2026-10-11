@@ -2,6 +2,10 @@
 
 ## [v0.6.2](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.1...v0.6.2) - 2026-10-11
 
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.1...v0.6.2
+
+## [v0.6.2](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.1...v0.6.2) - 2026-10-11
+
 ### Fixed
 - `migrate:rollback`, `migrate:reset` and `migrate:refresh` of an application
   that installs the module no longer stop on
