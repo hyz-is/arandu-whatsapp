@@ -83,6 +83,8 @@ type Manager struct {
 	globalEnabled    bool
 	signingAvailable bool
 	configCache      configurationCache
+	// now stamps the payload timestamp; tests fix it to pin the body bytes.
+	now func() time.Time
 }
 
 // NewManager returns a webhook manager over the host database.
@@ -133,7 +135,7 @@ func NewManager(db *data.DB, cfg ManagerConfig) (*Manager, error) {
 	}
 	return &Manager{repository: store, delivery: delivery, globalURL: globalURL,
 		globalEnabled: cfg.GlobalEnabled, signingAvailable: len(secret) > 0,
-		configCache: newConfigurationCache(cfg.ConfigurationCache, configTTL)}, nil
+		configCache: newConfigurationCache(cfg.ConfigurationCache, configTTL), now: time.Now}, nil
 }
 
 // RegisterJobHandlers registers the stable WhatsApp delivery handler.
@@ -160,7 +162,7 @@ func (m *Manager) Dispatch(ctx context.Context, grant security.Grant, instance W
 	if requestID == "" {
 		requestID = str.UUID()
 	}
-	payload := WebhookPayload{Event: event, Instance: instance, Data: payloadData, Timestamp: time.Now().UTC()}
+	payload := WebhookPayload{Event: event, Instance: instance, Data: payloadData, Timestamp: m.now().UTC()}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("serialize webhook payload: %w", err)
