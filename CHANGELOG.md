@@ -1,5 +1,20 @@
 # Release Notes
 
+## [v0.7.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.3...v0.7.0) - 2026-10-15
+
+### Changed
+- Requires `github.com/arandu-io/framework` v0.57.0 and
+  `github.com/arandu-io/hesape` v0.59.0 (were v0.56.0 and v0.54.0);
+  `arandu.mod.toml` declares the Framework floor `>= 0.57`. The module's API
+  is unchanged.
+- Webhook attempts run on Hesape's delivery engine through the `Manager`
+  facade. The wire is the same -- queue, job, payload, retries, headers, body
+  and signature, pinned by `TestDeliveryWireIsPinned` -- and a target sees
+  three differences: an address in 100.64.0.0/10 is refused as
+  `unsafe_destination`, no proxy is taken from the environment, and a 2xx
+  answer longer than 1 MiB is delivered instead of failing
+  `response_too_large`. `UPGRADE.md` has the details.
+
 ## [v0.6.3](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.2...v0.6.3) - 2026-10-11
 
 ### Fixed

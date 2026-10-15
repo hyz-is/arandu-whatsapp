@@ -8,6 +8,51 @@ every one of them would be a changelog nobody reads to find the two lines that
 matter.
 
 
+## v0.7.0 — the Framework floor is 0.57, on Hesape 0.59
+
+Nothing in this package's own API moved: `apidiff` against `v0.6.3` reports no
+incompatible change. What moved is the minimum it compiles against, which
+`go.mod` and `arandu.mod.toml` now declare:
+
+| | was | is |
+|---|---|---|
+| `github.com/arandu-io/framework` | `v0.56.0` | `v0.57.0` |
+| `github.com/arandu-io/hesape` | `v0.54.0` | `v0.59.0` |
+
+```bash
+go get github.com/arandu-io/framework@v0.57.0 github.com/arandu-io/hesape@v0.59.0
+```
+
+Framework v0.57.0 requires Hesape v0.59.0, so an application moves both
+together, following the Framework and Hesape upgrade guides between the two
+versions. Hesape v0.59.0 renames the value types of `hesape/webhook.Manager`
+(`webhook.Endpoint` is `webhook.ManagerEndpoint`, `webhook.Delivery` is
+`webhook.ManagerDelivery`, and the `Store`, `Claim` and `EndpointResolver`
+signatures that named them follow); that reaches an application only where it
+calls `hesape/webhook.Manager` itself. This package's delivery store is
+internal and already follows the rename.
+
+The webhooks this package sends are unchanged on the wire. They stay on the
+`whatsapp-webhooks` queue as `whatsapp.webhook.deliver` jobs with the
+`{"deliveryId"}` payload and five tries 5 s, 30 s, 2 min and 10 min apart, in
+the `whatsapp_webhook_deliveries` table, with the same headers
+(`X-Arandu-Delivery-Id`, `X-Arandu-Timestamp`, `X-Arandu-Signature`,
+`x-request-id`, `x-owner-jid`, `x-instance-name`, `x-instance-id`,
+`x-webhook-event`, `Content-Type`, `User-Agent`), the same body bytes and the
+same signature. What changes is the attempt, which is now Hesape's delivery
+engine, and a webhook target sees three differences:
+
+- A URL that resolves into the shared address space 100.64.0.0/10 (carrier-grade
+  NAT, and Tailscale addresses) is refused like a private address and recorded
+  as `unsafe_destination`, permanently. Point the webhook at a public address.
+- The transport no longer uses a proxy from `HTTP_PROXY`, `HTTPS_PROXY` or
+  `NO_PROXY`. A deployment that reached its webhook targets only through an
+  environment proxy no longer reaches them.
+- An answer is read up to 1 MiB and decided by its status, so a 2xx with a
+  longer body is delivered instead of failing `response_too_large`. A body
+  that cannot be read after the status arrived keeps that status in
+  `response_status`.
+
 ## v0.5.0 (multi-tenant)
 
 - An application that registered one module per tenant can register one. A
