@@ -2,6 +2,10 @@
 
 ## [v0.7.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.3...v0.7.0) - 2026-10-15
 
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.3...v0.7.0
+
+## [v0.7.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.3...v0.7.0) - 2026-10-15
+
 ### Changed
 - Requires `github.com/arandu-io/framework` v0.57.0 and
   `github.com/arandu-io/hesape` v0.59.0 (were v0.56.0 and v0.54.0);
