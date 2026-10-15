@@ -17,6 +17,10 @@
 
 ## [v0.6.3](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.2...v0.6.3) - 2026-10-11
 
+**Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.2...v0.6.3
+
+## [v0.6.3](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.2...v0.6.3) - 2026-10-11
+
 ### Fixed
 - `ConnectQRCode` called while the instance is already pairing now answers
   the QR code the pairing shows at that moment (`Count`, `Code`, `Base64`,
