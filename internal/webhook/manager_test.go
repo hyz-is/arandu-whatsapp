@@ -197,7 +197,7 @@ func TestStoreIdempotencyFencingAndConcurrentClaim(t *testing.T) {
 	store := newSQLDeliveryStore(db.db)
 	g := testRuntimeGrant()
 	now := time.Now().UTC()
-	base := hesapewebhook.Delivery{ID: "d1", EventID: "e1", EventName: "connection.update", EndpointID: "instance:1", URL: "https://example.com", Headers: map[string]string{}, Body: []byte(`{}`), CreatedAt: now, UpdatedAt: now}
+	base := hesapewebhook.ManagerDelivery{ID: "d1", EventID: "e1", EventName: "connection.update", EndpointID: "instance:1", URL: "https://example.com", Headers: map[string]string{}, Body: []byte(`{}`), CreatedAt: now, UpdatedAt: now}
 	created, err := store.Create(context.Background(), g, base)
 	if err != nil || !created {
 		t.Fatalf("create=%v %v", created, err)

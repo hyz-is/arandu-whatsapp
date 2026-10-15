@@ -58,7 +58,7 @@ func (s *sqlDeliveryStore) Transaction(ctx context.Context, fn func(context.Cont
 	return data.Transaction(ctx, s.db, fn)
 }
 
-func (s *sqlDeliveryStore) Create(ctx context.Context, grant security.Grant, item hesapewebhook.Delivery) (bool, error) {
+func (s *sqlDeliveryStore) Create(ctx context.Context, grant security.Grant, item hesapewebhook.ManagerDelivery) (bool, error) {
 	tenant, err := deliveryTenant(grant)
 	if err != nil {
 		return false, err
@@ -89,12 +89,12 @@ func (s *sqlDeliveryStore) Create(ctx context.Context, grant security.Grant, ite
 	return created == 1, nil
 }
 
-func (s *sqlDeliveryStore) Find(ctx context.Context, grant security.Grant, id string) (hesapewebhook.Delivery, error) {
+func (s *sqlDeliveryStore) Find(ctx context.Context, grant security.Grant, id string) (hesapewebhook.ManagerDelivery, error) {
 	tenant, err := deliveryTenant(grant)
 	if err != nil {
-		return hesapewebhook.Delivery{}, err
+		return hesapewebhook.ManagerDelivery{}, err
 	}
-	var item hesapewebhook.Delivery
+	var item hesapewebhook.ManagerDelivery
 	var body, headers, eventName, target, status string
 	var instanceID int64
 	var eventID, endpointID, secretRef sql.NullString
@@ -109,13 +109,13 @@ func (s *sqlDeliveryStore) Find(ctx context.Context, grant security.Grant, id st
 		&responseStatus, &lastError, &item.CreatedAt, &item.UpdatedAt, &deliveredAt,
 		&eventID, &endpointID, &secretRef, &item.Permanent, &leaseUntil)
 	if errors.Is(err, sql.ErrNoRows) {
-		return hesapewebhook.Delivery{}, hesapewebhook.ErrDeliveryNotFound
+		return hesapewebhook.ManagerDelivery{}, hesapewebhook.ErrDeliveryNotFound
 	}
 	if err != nil {
-		return hesapewebhook.Delivery{}, fmt.Errorf("find webhook delivery: %w", err)
+		return hesapewebhook.ManagerDelivery{}, fmt.Errorf("find webhook delivery: %w", err)
 	}
 	if err := json.Unmarshal([]byte(headers), &item.Headers); err != nil {
-		return hesapewebhook.Delivery{}, fmt.Errorf("decode webhook delivery headers: %w", err)
+		return hesapewebhook.ManagerDelivery{}, fmt.Errorf("decode webhook delivery headers: %w", err)
 	}
 	item.TenantID, item.EventID, item.EventName = tenant, eventID.String, eventName
 	if item.EventID == "" {

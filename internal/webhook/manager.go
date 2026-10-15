@@ -168,7 +168,7 @@ func (m *Manager) Dispatch(ctx context.Context, grant security.Grant, instance W
 		return fmt.Errorf("serialize webhook payload: %w", err)
 	}
 	headers := webhookHeaders(requestID, instance, event)
-	endpoints := make([]hesapewebhook.Endpoint, 0, 2)
+	endpoints := make([]hesapewebhook.ManagerEndpoint, 0, 2)
 	var result error
 	configured, err := m.configCache.lookup(ctx, runtimeGrant, instance.ID, func(inner context.Context) (types.Webhook, error) {
 		return m.repository.FindConfiguration(inner, runtimeGrant, instance.ID)
@@ -183,14 +183,14 @@ func (m *Manager) Dispatch(ctx context.Context, grant security.Grant, instance W
 			if normalizeErr != nil {
 				result = errors.Join(result, fmt.Errorf("normalize configured webhook URL: %w", normalizeErr))
 			} else {
-				endpoints = append(endpoints, hesapewebhook.Endpoint{ID: deliveryEndpointID(endpointTargetInstance, instance.ID), URL: url, Headers: headers})
+				endpoints = append(endpoints, hesapewebhook.ManagerEndpoint{ID: deliveryEndpointID(endpointTargetInstance, instance.ID), URL: url, Headers: headers})
 			}
 		}
 	case err != nil && !errors.Is(err, errWebhookConfigurationNotFound):
 		result = errors.Join(result, err)
 	}
 	if m.globalEnabled {
-		endpoints = append(endpoints, hesapewebhook.Endpoint{ID: deliveryEndpointID(endpointTargetGlobal, instance.ID), URL: m.globalURL, Headers: headers})
+		endpoints = append(endpoints, hesapewebhook.ManagerEndpoint{ID: deliveryEndpointID(endpointTargetGlobal, instance.ID), URL: m.globalURL, Headers: headers})
 	}
 	if len(endpoints) == 0 {
 		return result
