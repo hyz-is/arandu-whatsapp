@@ -8,7 +8,7 @@ every one of them would be a changelog nobody reads to find the two lines that
 matter.
 
 
-## Unreleased -- Go 1.26.10 is the floor, on Framework 0.66 and Hesape 0.85
+## v0.8.0 -- Go 1.26.10 is the floor, on Framework 0.66 and Hesape 0.85
 
 `go.mod` declares `go 1.26.10`. Every vulnerability an Arandu application
 reaches is in the Go standard library (crypto/x509, the HTTP/2 and CONNECT
