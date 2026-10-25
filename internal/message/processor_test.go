@@ -11,6 +11,7 @@ import (
 
 	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/security"
+	"github.com/arandu-io/hesape/database"
 	"github.com/arandu-io/hesape/queue"
 	"github.com/arandu-io/hesape/queue/jobs"
 	_ "modernc.org/sqlite"
@@ -387,18 +388,22 @@ func newMessageQueueTestDB(t *testing.T, name string, withJobs bool) *data.DB {
 			webhook_instance TEXT NOT NULL, created_at TIMESTAMP NOT NULL,
 			updated_at TIMESTAMP NOT NULL)`,
 	}
-	if withJobs {
-		statements = append(statements, `CREATE TABLE jobs (
-			id TEXT PRIMARY KEY, queue TEXT NOT NULL, name TEXT NOT NULL, display_name TEXT,
-			tenant_id TEXT NOT NULL, payload TEXT NOT NULL, authorized_by TEXT NOT NULL,
-			action TEXT NOT NULL, run_at TIMESTAMP NOT NULL, reserved_until TIMESTAMP,
-			attempts INTEGER NOT NULL DEFAULT 0, exceptions INTEGER NOT NULL DEFAULT 0,
-			attributes TEXT, failed_at TIMESTAMP, last_error TEXT, created_at TIMESTAMP)`)
-	}
 	for _, statement := range statements {
 		if _, err := raw.Exec(statement); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return data.Wrap(raw, data.DialectSQLite)
+	wrapped := data.Wrap(raw, data.DialectSQLite)
+	if withJobs {
+		// The jobs table is the queue driver's own schema, created by its
+		// migrations rather than restated here: a copy falls behind the
+		// first column the driver adds and starts writing.
+		conn := database.ForMigrations(database.NewConnection(raw, "", "", map[string]any{"driver": "sqlite", "name": "default"}))
+		for _, migration := range queue.NewDatabaseQueue(wrapped).Migrations() {
+			if err := migration.Up(context.Background(), conn); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return wrapped
 }

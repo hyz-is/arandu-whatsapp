@@ -14,8 +14,8 @@ variables or open a second application database.
 
 ## Requirements
 
-- Go 1.26 or newer.
-- Arandu Framework 0.57 or newer.
+- Go 1.26.10 or newer.
+- Arandu Framework 0.66 or newer.
 - PostgreSQL or SQLite with foreign keys enabled.
 - `ffmpeg` and `ffprobe` for audio and thumbnail processing.
 

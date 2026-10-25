@@ -13,6 +13,7 @@ import (
 	"github.com/arandu-io/framework/data"
 	fhttp "github.com/arandu-io/framework/http"
 	"github.com/arandu-io/framework/security"
+	hhttp "github.com/arandu-io/hesape/http"
 )
 
 func TestInstanceHTTPPaginationAndPhoneBodyContract(t *testing.T) {
@@ -39,8 +40,16 @@ func TestInstanceHTTPPaginationAndPhoneBodyContract(t *testing.T) {
 	router := fhttp.NewRouter()
 	module.Routes(router.ForModule(module.Name()))
 	actor := security.Subject{ID: "user-1", Tenant: "acme", Roles: []string{"admin"}, Verified: true}
+	// The session holds the identity and nothing else; the role reaches the
+	// handler only through the resolver, as it does in an application.
+	sessions.ResolveSubjects(func(_ context.Context, who security.Subject) (security.Subject, error) {
+		if who.ID != actor.ID || who.Tenant != actor.Tenant {
+			return security.Subject{}, hhttp.ErrSubjectGone
+		}
+		return actor, nil
+	})
 	sessionResponse := httptest.NewRecorder()
-	if _, err := sessions.Start(context.Background(), sessionResponse, actor); err != nil {
+	if _, err := sessions.Start(context.Background(), sessionResponse, security.Subject{ID: actor.ID, Tenant: actor.Tenant}); err != nil {
 		t.Fatal(err)
 	}
 	cookies := sessionResponse.Result().Cookies()
