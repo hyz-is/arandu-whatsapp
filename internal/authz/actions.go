@@ -49,6 +49,24 @@ const (
 	ActionRuntimeDiscover security.Action = "whatsapp.runtime.discover"
 )
 
+// Writes reports whether a Grant issued for the action may write.
+//
+// Three actions read and nothing else: listing instances, viewing one, and
+// viewing its webhook configuration. Every other action writes, including
+// the ones named for reading -- the connection state, the message list, a
+// media download, a contact check, a profile picture and a group invite --
+// because their flow reopens a logged-out instance or stores the address
+// mapping a lookup resolved, under the Grant the request was issued. The set
+// of reads is closed: an action added later writes until it is named here
+// and its flow is shown to write nothing.
+func Writes(action security.Action) bool {
+	switch action {
+	case ActionInstanceList, ActionInstanceView, ActionWebhookView:
+		return false
+	}
+	return true
+}
+
 // CheckInstanceLookup accepts only actions whose service flow must load an
 // instance before applying the record-level policy decision.
 func CheckInstanceLookup(grant security.Grant) error {

@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/arandu-io/framework/security"
+	"github.com/arandu-io/hesape/auth"
 
 	"github.com/hyz-is/arandu-whatsapp/app/Enums"
 	appconfig "github.com/hyz-is/arandu-whatsapp/config"
+	"github.com/hyz-is/arandu-whatsapp/internal/authz"
 )
 
 // Instance actions identify permissions for instance lifecycle operations.
@@ -94,6 +96,16 @@ func NewInstancePolicy(cfg PolicyConfig) InstancePolicy {
 }
 
 var _ security.Policy[Instance] = InstancePolicy{}
+
+// Compile-time proof that the policy says which of its actions write.
+var _ auth.Writes = InstancePolicy{}
+
+// Writes reports whether a Grant issued for the action may write. A Grant
+// issued to list or view an instance, or to view its webhook configuration,
+// is refused by every write with auth.ErrReadGrant; every other action
+// writes, because its flow can change the instance or store what it looked
+// up.
+func (InstancePolicy) Writes(action security.Action) bool { return authz.Writes(action) }
 
 // Can decides whether a subject may perform an action on an instance.
 func (p InstancePolicy) Can(_ context.Context, subject security.Subject, action security.Action, instance Instance) error {
