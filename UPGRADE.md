@@ -8,6 +8,59 @@ every one of them would be a changelog nobody reads to find the two lines that
 matter.
 
 
+## Unreleased -- Go 1.26.10 is the floor, on Framework 0.66 and Hesape 0.85
+
+`go.mod` declares `go 1.26.10`. Every vulnerability an Arandu application
+reaches is in the Go standard library (crypto/x509, the HTTP/2 and CONNECT
+handling in net/http, html/template, net/textproto and crypto/tls) and is
+fixed in Go 1.26.10, so a module that declared less let a build run on a
+toolchain that still carries them. Build with Go 1.26.10 or later.
+
+The package compiles against newer Arandu modules, and `arandu.mod.toml` now
+declares `framework = ">= 0.66"`:
+
+| | was | is |
+|---|---|---|
+| `github.com/arandu-io/framework` | `v0.57.0` | `v0.66.0` |
+| `github.com/arandu-io/hesape` | `v0.59.0` | `v0.85.0` |
+| `github.com/hyz-is/arandu-swagger` | `v0.4.5` | `v0.6.0` |
+
+```bash
+go get github.com/arandu-io/framework@v0.66.0
+go get github.com/arandu-io/hesape@v0.85.0
+go get github.com/hyz-is/arandu-swagger@v0.6.0
+```
+
+An application below those follows the Framework, Hesape and Swagger upgrade
+guides between the versions it had and these first. No route, migration,
+action, tenant rule or table of this package changes.
+
+### Signatures that read the same and compile unchanged
+
+`apidiff` against `v0.7.0` names six incompatible changes, and none of them
+asks anything of a caller. Each one takes or returns a type the Framework now
+declares as an alias of the Hesape type (`security.SessionStore` is Hesape's
+`http.SessionStore`, `http.Router` is Hesape's controller router), so the
+signature reads the same and the value an application already passes is the
+same type:
+
+- `New` and `NewWithDocumentation`, which take the `*security.SessionStore`.
+- `(*Module).Routes`, which takes the `*http.Router`.
+- `app/Http/Controllers.NewWhatsAppController`, which takes the
+  `*security.SessionStore`.
+- `routes.Web` and `routes.WebDocumented`, which take the `*http.Router`.
+
+### `InstancePolicy` says which actions write
+
+`InstancePolicy` implements `auth.Writes`: `whatsapp.instance.list`,
+`whatsapp.instance.view` and `whatsapp.webhook.view` read, and a Grant issued
+for any of them is refused by every write with `auth.ErrReadGrant`. Every other
+action writes, including the ones named for reading (the connection state, the
+message list, a media download, a contact check, a profile picture and a group
+invite), because their flow reopens a logged-out instance or stores the address
+mapping a lookup resolved. Nothing this package does writes with a read Grant,
+so the routes and the service behave as they did.
+
 ## v0.7.0 — the Framework floor is 0.57, on Hesape 0.59
 
 Nothing in this package's own API moved: `apidiff` against `v0.6.3` reports no
