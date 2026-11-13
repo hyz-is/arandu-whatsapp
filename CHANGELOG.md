@@ -1,5 +1,22 @@
 # Release Notes
 
+## v0.8.1 - 2026-11-13
+
+### Fixed
+- The WhatsMeow store upgrade no longer fails with `relation "whatsmeow_version"
+  does not exist` when the connection's schema is not the only one holding a
+  table of that name (a per-test schema, a development database that also has
+  `public`). On PostgreSQL the migration creates the version table in the
+  connection's own schema before the upstream upgrader runs.
+- `Start` no longer fails when the schema has not been migrated. The process
+  boots, the error is logged, `Module.Available` returns `ErrSchemaUnavailable`,
+  operations answer an error matching `ErrWhatsAppUnavailable`, and the module
+  recovers by itself once `aru migrate` has run. A new image booting before the
+  migration used to take the whole application down.
+
+### Added
+- `Module.Available` and `ErrSchemaUnavailable`.
+
 ## [v0.7.0](https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.3...v0.7.0) - 2026-10-15
 
 **Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.6.3...v0.7.0

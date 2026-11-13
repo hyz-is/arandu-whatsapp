@@ -33,6 +33,10 @@ type Service struct {
 	chats       chat.Service
 	groups      group.Service
 	webhooks    webhooksvc.Service
+
+	// availability answers nil when the module can serve and the reason when it
+	// cannot (its schema has not been migrated). Nil means always available.
+	availability func() error
 }
 
 // NewService returns the authorized WhatsApp domain service.
@@ -52,6 +56,10 @@ func NewService(
 		groups: groups, webhooks: webhooks,
 	}
 }
+
+// SetAvailability installs the check every operation runs first. It is set once,
+// before the service is used.
+func (s *Service) SetAvailability(check func() error) { s.availability = check }
 
 // CreateInstance validates, authorizes and creates one instance.
 func (s *Service) CreateInstance(ctx context.Context, actor security.Subject, input requests.CreateInstance) (models.Instance, error) {
@@ -452,12 +460,18 @@ func (s *Service) authorizedInstance(ctx context.Context, actor security.Subject
 	return grant, instance, nil
 }
 
-// checkTenant refuses a subject with no tenant. Which tenant's instance a
-// subject may reach is the policy's decision, made against the instance's own
-// tenant: the module hosts every tenant of the application.
+// checkTenant refuses a subject with no tenant, and every operation while the
+// module's schema is not migrated. Which tenant's instance a subject may reach
+// is the policy's decision, made against the instance's own tenant: the module
+// hosts every tenant of the application.
 func (s *Service) checkTenant(actor security.Subject) error {
 	if actor.Tenant == "" {
 		return fmt.Errorf("%w: subject has no tenant", security.ErrForbidden)
+	}
+	if s.availability != nil {
+		if err := s.availability(); err != nil {
+			return fmt.Errorf("%w: %w", internalwhatsapp.ErrWhatsAppUnavailable, err)
+		}
 	}
 	return nil
 }

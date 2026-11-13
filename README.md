@@ -305,6 +305,9 @@ request while declaring `network = false` is rejected.
 - `Boot` configures the process-wide WhatsMeow device descriptor.
 - `Start` verifies schema state, discovers the tenants with paired instances
   and restores each tenant's connections under its own Grant, asynchronously.
+  Without the schema it still boots: it logs the error, `Available` returns
+  `ErrSchemaUnavailable`, operations are refused and the schema is rechecked
+  until `aru migrate` has run (see `docs/migrations.md`).
 - `Health` checks the borrowed database and connection-restore result.
 - `Close` stops module-owned work and disconnects managed clients. The host
   application owns all native queue workers.

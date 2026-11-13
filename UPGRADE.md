@@ -8,6 +8,15 @@ every one of them would be a changelog nobody reads to find the two lines that
 matter.
 
 
+## v0.8.1 -- Start boots without the schema
+
+`Start` returned an error, and stopped the application, when the WhatsMeow store
+or `whatsapp_instances` did not exist. It now logs the error and returns nil, and
+the module answers `ErrWhatsAppUnavailable` (also matching `ErrSchemaUnavailable`)
+until `aru migrate` has run. Code that relied on `Start` failing to detect a
+missing migration should call `Module.Available()` instead. Code that treats an
+operation error as "WhatsApp is down" needs no change.
+
 ## v0.8.0 -- Go 1.26.10 is the floor, on Framework 0.66 and Hesape 0.85
 
 `go.mod` declares `go 1.26.10`. Every vulnerability an Arandu application

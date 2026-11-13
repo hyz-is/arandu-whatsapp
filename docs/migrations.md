@@ -93,12 +93,36 @@ rollback to a newer reversible migration, or restore the complete database from
 a backup. The current Hesape migrator can otherwise remove an irreversible
 migration from its history without changing the upstream schema.
 
-## Startup errors
+## Startup without the schema
 
-`Start` verifies that `whatsmeow_version` exists and contains a version row. If
-it does not, startup fails before WhatsApp connection restoration begins and
-the error instructs the operator to run `aru migrate`. Version compatibility itself
+`Start` verifies that `whatsapp_instances` exists and that `whatsmeow_version`
+holds a version row. If they do not, the module does not stop the process: a
+new image can boot before `aru migrate` has run, and a module that refused to
+start took the whole application down with it. `Start` logs one error that says
+to run `aru migrate`, `Module.Available` returns an error matching
+`ErrSchemaUnavailable`, every service operation answers an error matching both
+`ErrWhatsAppUnavailable` and `ErrSchemaUnavailable`, and nothing connects to
+WhatsApp. A background goroutine looks again every 15 seconds; when the schema
+appears it clears the error and restores the paired connections, with no
+restart. `Health` stays nil in this state, because readiness belongs to the
+application and an optional capability waiting for a migration must not make the
+rest of it unready.
+
+A closed database and SQLite with foreign keys off are configuration errors, not
+a pending migration, and still fail `Start`. Version compatibility itself
 belongs to the upstream upgrader and is not duplicated as a hardcoded check.
+
+## Schemas other than the default
+
+The WhatsMeow upgrader asks `information_schema` whether its version table
+exists by name alone, across every schema of the database, and then reads it
+through the connection's `search_path`. With a table of that name in another
+schema, the upgrade failed with `relation "whatsmeow_version" does not exist`.
+On PostgreSQL the delegated migration therefore creates the version table in the
+connection's own schema first (`CREATE TABLE IF NOT EXISTS`, idempotent) and the
+upgrader proceeds from there. The default `public` layout is unchanged.
+`WHATSAPP_TEST_POSTGRES_URL` points the PostgreSQL schema test at a database
+where it may create and drop schemas.
 
 ## Verification
 

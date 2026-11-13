@@ -56,6 +56,11 @@ var (
 	ErrClientOutdated = internalwhatsapp.ErrClientOutdated
 	// ErrWhatsAppUnavailable means the upstream WhatsApp service is unavailable.
 	ErrWhatsAppUnavailable = internalwhatsapp.ErrWhatsAppUnavailable
+	// ErrSchemaUnavailable means the module's tables or the WhatsMeow store have
+	// not been migrated yet. The module boots anyway and answers every operation
+	// with this error, which also matches ErrWhatsAppUnavailable, until
+	// `aru migrate` has run.
+	ErrSchemaUnavailable = internalwhatsapp.ErrSchemaUnavailable
 	// ErrInvalidPhoneNumber means a phone number cannot be normalized for pairing.
 	ErrInvalidPhoneNumber = internalwhatsapp.ErrInvalidPhoneNumber
 	// ErrSessionMissing means the instance has no usable WhatsApp session.
