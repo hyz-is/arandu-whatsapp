@@ -600,11 +600,11 @@ func TestHandleMessageTellsInboundHandlersAfterPersistingUnderTheRuntimeGrant(t 
 	service.SetWebhookDispatcher(fakeInstanceFinder(), &fakePersistenceWebhooks{})
 	var told []string
 	var tenant string
-	service.AddInboundHandler(func(_ context.Context, grant security.Grant, instanceName string, message dbtypes.CreateMessageInput) {
+	service.AddInboundHandler(func(_ context.Context, grant security.Grant, instanceName string, message dbtypes.CreateMessageInput, _ InboundDetails) {
 		told = append(told, instanceName+"/"+message.KeyID)
 		tenant = data.Tenant(grant)
 	})
-	service.AddInboundHandler(func(context.Context, security.Grant, string, dbtypes.CreateMessageInput) {
+	service.AddInboundHandler(func(context.Context, security.Grant, string, dbtypes.CreateMessageInput, InboundDetails) {
 		panic("a broken handler")
 	})
 
@@ -619,7 +619,7 @@ func TestHandleMessageTellsInboundHandlersAfterPersistingUnderTheRuntimeGrant(t 
 	}
 
 	failing := NewEventPersistenceService(EventPersistenceConfig{SaveDataNewMessage: true}, &fakePersistenceMessages{createErr: errors.New("database down")}, &fakePersistenceMessageUpdates{}, &fakePersistenceContacts{})
-	failing.AddInboundHandler(func(context.Context, security.Grant, string, dbtypes.CreateMessageInput) {
+	failing.AddInboundHandler(func(context.Context, security.Grant, string, dbtypes.CreateMessageInput, InboundDetails) {
 		t.Fatal("a handler was told about a message that was not persisted")
 	})
 	failing.HandleMessage(context.Background(), managed, textEvent("msg-2"))

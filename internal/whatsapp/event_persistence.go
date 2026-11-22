@@ -53,7 +53,10 @@ type EventPersistenceService struct {
 // InboundHandler is told about a message once it is persisted, with the
 // runtime Grant of the instance it arrived on -- so the tenant it belongs to
 // is the Grant's and nobody else's.
-type InboundHandler func(ctx context.Context, grant security.Grant, instanceName string, message dbtypes.CreateMessageInput)
+//
+// The details carry what the persisted row does not: the sender's phone
+// number resolved from a private LID, the broadcast list and the group.
+type InboundHandler func(ctx context.Context, grant security.Grant, instanceName string, message dbtypes.CreateMessageInput, details InboundDetails)
 
 // AddInboundHandler registers a handler. It is called during wiring, before
 // any instance runs.
@@ -63,7 +66,11 @@ func (s *EventPersistenceService) AddInboundHandler(fn InboundHandler) {
 	}
 }
 
-func (s *EventPersistenceService) tellInbound(ctx context.Context, managed *ManagedWhatsAppClient, message dbtypes.CreateMessageInput) {
+func (s *EventPersistenceService) tellInbound(ctx context.Context, managed *ManagedWhatsAppClient, message dbtypes.CreateMessageInput, info types.MessageInfo) {
+	if len(s.inbound) == 0 {
+		return
+	}
+	details := ResolveInboundDetails(ctx, info, ownAddress(managed), phoneResolverOf(managed))
 	for _, fn := range s.inbound {
 		func() {
 			defer func() {
@@ -72,7 +79,7 @@ func (s *EventPersistenceService) tellInbound(ctx context.Context, managed *Mana
 						"component", "event_persistence", "instance_name", managed.InstanceName, "panic", r)
 				}
 			}()
-			fn(ctx, managed.RuntimeGrant, managed.InstanceName, message)
+			fn(ctx, managed.RuntimeGrant, managed.InstanceName, message, details)
 		}()
 	}
 }
@@ -137,7 +144,7 @@ func (s *EventPersistenceService) HandleMessage(ctx context.Context, managed *Ma
 			"component", "event_persistence", "instance_name", managed.InstanceName,
 			"message_key_id", message.KeyID, "message_type", message.MessageType)
 		s.dispatchMessageUpsertWebhook(ctx, managed, message.KeyID)
-		s.tellInbound(ctx, managed, message)
+		s.tellInbound(ctx, managed, message, event.Info)
 	}
 }
 
@@ -566,4 +573,20 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+// ownAddress is the paired account's own address, empty while unpaired.
+func ownAddress(managed *ManagedWhatsAppClient) types.JID {
+	if managed == nil || managed.Client == nil || managed.Client.Store == nil || managed.Client.Store.ID == nil {
+		return types.EmptyJID
+	}
+	return *managed.Client.Store.ID
+}
+
+// phoneResolverOf is the client's LID store, or nil when it has none.
+func phoneResolverOf(managed *ManagedWhatsAppClient) PhoneNumberResolver {
+	if managed == nil || managed.Client == nil || managed.Client.Store == nil || managed.Client.Store.LIDs == nil {
+		return nil
+	}
+	return managed.Client.Store.LIDs
 }
