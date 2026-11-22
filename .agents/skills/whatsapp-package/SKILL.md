@@ -135,7 +135,7 @@ identifier and the response is a declared list of fields rather than the entity.
 ## Every route refuses everybody until its action is configured
 
 This is the state the package ships in, and it is not a bug to work around.
-An empty `Config.Policy.Roles` denies all 26 public actions:
+An empty `Config.Policy.Roles` denies all 27 public actions:
 
 ```
 403 forbidden

@@ -74,7 +74,7 @@ application that installs this one, not here.
 | --- | --- |
 | 36 named routes | `grep -c 'register(stdhttp' routes/web.go` |
 | 36 documented operations | `grep -c '^\s*"whatsapp\.' app/Http/Documentation/OperationDefinitions.go` and the generated-contract parity test |
-| 27 declared actions: 26 public plus the internal runtime action | `grep -c 'security.Action = "whatsapp' internal/authz/actions.go` |
+| 29 declared actions: 27 public plus the two internal runtime actions | `grep -c 'security.Action = "whatsapp' internal/authz/actions.go` |
 | 4 ordered migrations, 3 reversible | `grep -Rh 'GetName() string' database/migrations/*.go \| wc -l` |
 | PostgreSQL and SQLite runtime support | `New` dialect validation and migration tests |
 

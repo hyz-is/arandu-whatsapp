@@ -204,6 +204,34 @@ whatsappModule.OnInbound(func(ctx context.Context, g security.Grant, m whatsapp.
 })
 ```
 
+A message from a contact that WhatsApp addresses by a private LID carries no
+phone number in `RemoteJID`. `InboundMessage` therefore also carries who sent it
+and where it came from:
+
+```go
+whatsappModule.OnInbound(func(ctx context.Context, g security.Grant, m whatsapp.InboundMessage) {
+	// m.SenderPhone: digits with the country code and no plus sign, such as
+	//   "5511999990001"; empty while a LID has no known number.
+	// m.SenderJID is the address WhatsApp delivered and m.SenderLID the private
+	//   LID when there was one.
+	// m.IsBroadcast / m.BroadcastListJID: the message came through a broadcast
+	//   list. m.GroupJID: the group it was posted in, empty outside a group.
+	// m.IsGroup keeps WhatsApp's own flag, true for a group and for a broadcast
+	//   list; test GroupJID or IsBroadcast to tell them apart.
+})
+```
+
+`SenderPhone` is the number WhatsApp delivered with the message, or the one
+WhatsMeow's LID store maps the private LID to. The listener never waits for the
+network to read it.
+
+To list the groups an instance has joined, call `Service().ListGroups(ctx,
+subject, instanceName)`. It answers each group's JID (`ID`), `Subject` and
+`Size` (the participant count), without the participants, and needs the
+`whatsapp.group.list` action (`whatsapp.ActionGroupList`) in `Policy.Roles`:
+like every action, it stays closed until it is listed. The instance has to be
+connected.
+
 This package declares four ordered Foundation migrations: three reversible
 package schemas and the upstream WhatsMeow store upgrade. They are exposed
 through `foundation.Migratable`, which is why the migration step is not optional

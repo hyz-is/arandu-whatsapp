@@ -1,5 +1,24 @@
 # Release Notes
 
+## v0.8.3 - 2026-11-22
+
+### Added
+- `InboundMessage` says who sent a message and where it came from, so a
+  listener can match a sender that WhatsApp addresses by a private LID:
+  `SenderPhone` (digits with the country code, no plus sign; the number
+  WhatsApp delivered, or the one the WhatsMeow LID store maps the LID to, and
+  empty while the LID has no known number), `SenderJID` (the address as
+  delivered) and `SenderLID`. A message from a private LID used to reach the
+  listener with an empty `RemoteJID` and no number at all.
+- `InboundMessage.IsBroadcast` and `BroadcastListJID` mark a message that came
+  through a broadcast list, and `GroupJID` names the group a message was
+  posted in. `IsGroup` is unchanged: it is still WhatsApp's flag, true for a
+  group and for a broadcast list.
+- `Service.ListGroups` lists the groups an instance has joined (`ID`, `Subject`,
+  `Size`, `Owner`, `Creation`, `IsCommunity`), without the participants, through
+  the new `whatsapp.group.list` action (`ActionGroupList`). Like every action,
+  it stays closed until `Policy.Roles` or `Policy.Actions` lists it.
+
 ## [v0.8.2](https://github.com/hyz-is/arandu-whatsapp/compare/v0.8.0...v0.8.2) - 2026-11-22
 
 **Full Changelog**: https://github.com/hyz-is/arandu-whatsapp/compare/v0.8.0...v0.8.2
