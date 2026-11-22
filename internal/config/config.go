@@ -17,6 +17,16 @@ const (
 	DefaultSessionPhoneName = "Arandu"
 )
 
+const (
+	// DefaultRestoreInterval is how often the restore supervisor runs when the
+	// configuration leaves it at zero.
+	DefaultRestoreInterval = 30 * time.Second
+	// MaxRestoreInterval is the longest restore period accepted. The
+	// connection lease lasts twice as long, so a renewal is never later than
+	// half of it.
+	MaxRestoreInterval = time.Minute
+)
+
 // WhatsAppConfig controls pairing, reconnects and address resolution.
 type WhatsAppConfig struct {
 	QRCodeLimit                 int
@@ -27,6 +37,7 @@ type WhatsAppConfig struct {
 	SessionPhoneName            string
 	PairingTimeout              time.Duration
 	AutoReconnect               bool
+	RestoreInterval             time.Duration
 	StartupReconnectConcurrency int
 	ConnectTimeout              time.Duration
 	ReconnectInitialDelay       time.Duration

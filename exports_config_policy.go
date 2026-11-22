@@ -193,8 +193,15 @@ type WhatsAppConfig struct {
 	SessionPhoneName string
 	// PairingTimeout bounds one QR, phone-code or Passkey pairing flow.
 	PairingTimeout time.Duration
-	// AutoReconnect restores eligible sessions when the module starts.
+	// AutoReconnect restores eligible sessions when the module starts and keeps
+	// restoring them while it runs.
 	AutoReconnect bool
+	// RestoreInterval is how often, with up to 20% jitter, the module retries
+	// the paired sessions this process holds no connection for (their
+	// connection lease was held by another process, or a connect failed) and
+	// renews the lease of every session it is connected to. Zero uses 30
+	// seconds. It cannot exceed one minute: the lease lasts two.
+	RestoreInterval time.Duration
 	// StartupReconnectConcurrency bounds parallel session restoration.
 	StartupReconnectConcurrency int
 	// ConnectTimeout bounds one WhatsApp connection attempt.

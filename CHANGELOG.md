@@ -1,5 +1,52 @@
 # Release Notes
 
+## v0.8.2 - 2026-11-22
+
+### Fixed
+- A paired session is no longer left disconnected for good when its restore
+  lost a race at boot. Restore ran once: if another container held the
+  instance's connection lease (two minutes, taken while one connects), that
+  instance was skipped without a line in the log and never tried again, so
+  three containers started within ninety seconds of each other (consecutive
+  zero-downtime deploys) could leave every paired session in the database
+  and none in memory. `Start` now keeps a supervisor running that, every
+  `WhatsApp.RestoreInterval` (default 30 seconds, up to 20% jitter), tries the
+  paired instances this process holds no client for and connects the ones whose
+  lease is free or expired. It never pairs and never asks for a QR code, and it
+  skips instances whose stored status is `logged_out` or `session_missing`.
+- A restore skipped because the lease is held is logged once (`WhatsApp restore
+  skipped: the connection lease is held by another process; it will be
+  retried`), and the success is logged when the instance later connects.
+- Two processes can no longer connect the same session. The lease was released
+  the moment a client connected, so a container booting beside a connected one
+  took the free lease and replaced the other's WhatsApp stream. A connected
+  client now keeps its lease, and every `RestoreInterval` the process renews
+  the lease of each client it holds. A process whose lease was taken over (it
+  stalled past the two minutes) disconnects its client rather than fight for the
+  socket.
+- `Close` disconnects the clients first and releases their leases afterwards,
+  with a deadline of its own, so the next container takes the sessions over at
+  once and not after the lease expires. A process that dies without closing
+  loses them when the lease expires, at most two minutes.
+- `Health` reports a restore failure only until a later pass succeeds.
+- A restore that cannot read the WhatsMeow store no longer marks the instance
+  `session_missing`, which says the device is gone. It stores `connection_error`
+  and the supervisor tries again; only a store that answers there is no device
+  stores `session_missing`.
+
+### Added
+- `Config.WhatsApp.RestoreInterval`: the period of the restore supervisor and of
+  the lease renewal. Zero uses 30 seconds; it cannot exceed one minute and a
+  negative value is refused.
+
+### Changed
+- An instance connected in one process is owned by that process: `ConnectQRCode`
+  and `ConnectPhone` called on another container answer connection in progress,
+  and logging out or deleting it there answers `ErrConnectionInProgress`, where
+  they used to take the free lease and open a second connection. Send the
+  request to the container that holds the connection, or let the supervisor move
+  the session when that container goes away.
+
 ## v0.8.1 - 2026-11-13
 
 ### Fixed

@@ -30,6 +30,12 @@ i.id, i.tenant_id, i.name, i.description, i.status, i.owner_jid,
 	c.last_connection_error, c.last_connection_event,
 	COALESCE(c.connection_attempts, 0)`
 
+// ConnectionLockTTL is how long one acquisition or renewal of an instance's
+// connection lease lasts. The process that owns a connection renews it well
+// before it lapses; a process that dies without releasing it loses the
+// instance to another one when the time is up.
+const ConnectionLockTTL = 2 * time.Minute
+
 // SQLInstanceRepository adapts the original WhatsApp domain to Arandu's
 // instrumented database. Every exported persistence operation receives and
 // checks its Grant before deriving tenant information.
@@ -601,7 +607,7 @@ func (r *SQLInstanceRepository) TryAcquireConnectionLock(ctx context.Context, gr
 		SET connection_lock_owner = ?, connection_lock_until = ?
 		WHERE tenant_id = ? AND id = ?
 		  AND (connection_lock_until IS NULL OR connection_lock_until <= ? OR connection_lock_owner = ?)`,
-		r.lockOwner, now.Add(2*time.Minute), tenant, id, now, r.lockOwner)
+		r.lockOwner, now.Add(ConnectionLockTTL), tenant, id, now, r.lockOwner)
 	if err != nil {
 		return false, fmt.Errorf("acquire whatsapp connection lock: %w", err)
 	}

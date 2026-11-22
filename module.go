@@ -15,6 +15,7 @@ import (
 	fhttp "github.com/arandu-io/framework/http"
 	"github.com/arandu-io/framework/security"
 	"github.com/arandu-io/hesape/cache"
+	hlog "github.com/arandu-io/hesape/log"
 	"github.com/arandu-io/hesape/queue"
 	swagger "github.com/hyz-is/arandu-swagger"
 
@@ -57,6 +58,7 @@ type Module struct {
 	lifecycle   context.Context
 	cancel      context.CancelFunc
 	restoreDone chan struct{}
+	leaseDone   chan struct{}
 	restoreErr  error
 	started     bool
 	closed      bool
@@ -272,7 +274,7 @@ func (m *Module) Start(ctx context.Context) error {
 			"component", "whatsapp", "error", schemaErr)
 	}
 
-	lifecycle, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	lifecycle, cancel := context.WithCancel(hlog.Into(context.WithoutCancel(ctx), m.logger))
 	// Discovery reads which tenants have instances to reconnect, and nothing
 	// else; each one is restored under its own runtime Grant (RestoreAll).
 	//arandu:system-grant module startup lists the tenants whose paired instances it reconnects
@@ -281,7 +283,12 @@ func (m *Module) Start(ctx context.Context) error {
 	m.lifecycle = lifecycle
 	m.cancel = cancel
 	m.restoreDone = make(chan struct{})
+	m.leaseDone = make(chan struct{})
 	m.started = true
+	go func(done chan struct{}) {
+		defer close(done)
+		m.connections.HoldLeases(lifecycle)
+	}(m.leaseDone)
 	go m.run(lifecycle, runtimeGrant, m.restoreDone, schemaErr != nil)
 	return nil
 }
@@ -329,14 +336,16 @@ func (m *Module) verifySchema(ctx context.Context) error {
 	return nil
 }
 
-// run waits for the schema when Start found it missing, then restores the
-// connections. It owns done and closes it when it returns.
+// run waits for the schema when Start found it missing, restores the
+// connections, and then keeps restoring the ones this process could not take,
+// until the module closes. It owns done and closes it when it returns.
 func (m *Module) run(ctx context.Context, grant security.Grant, done chan struct{}, waitForSchema bool) {
 	defer close(done)
 	if waitForSchema && !m.awaitSchema(ctx) {
 		return
 	}
 	m.restore(ctx, grant)
+	m.connections.Supervise(ctx, grant, m.reportRestore)
 }
 
 // awaitSchema checks for the schema every schemaRetry until it appears and
@@ -366,9 +375,19 @@ func (m *Module) restore(ctx context.Context, grant security.Grant) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}
+	m.reportRestore(err)
+}
+
+// reportRestore records the outcome of a restore for Health: an error until a
+// later pass succeeds.
+func (m *Module) reportRestore(err error) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err == nil {
+		m.restoreErr = nil
+		return
+	}
 	m.restoreErr = fmt.Errorf("restore WhatsApp connections: %w", err)
-	m.mu.Unlock()
 }
 
 // Health checks only module-owned runtime state and the borrowed database. It
@@ -401,15 +420,19 @@ func (m *Module) Close(ctx context.Context) error {
 	m.closed = true
 	cancel := m.cancel
 	done := m.restoreDone
+	leaseDone := m.leaseDone
 	m.mu.Unlock()
 
 	if cancel != nil {
 		cancel()
 	}
 	var errs []error
-	if done != nil {
+	for _, finished := range []chan struct{}{done, leaseDone} {
+		if finished == nil {
+			continue
+		}
 		select {
-		case <-done:
+		case <-finished:
 		case <-ctx.Done():
 			errs = append(errs, ctx.Err())
 		}
@@ -445,6 +468,7 @@ func internalWhatsAppConfig(cfg appconfig.Config) internalconfig.WhatsAppConfig 
 		QRCodeLightColor: cfg.WhatsApp.QRCodeLightColor, QRCodeDarkColor: cfg.WhatsApp.QRCodeDarkColor,
 		SessionPhoneClient: cfg.WhatsApp.SessionPhoneClient, SessionPhoneName: cfg.WhatsApp.SessionPhoneName,
 		PairingTimeout: cfg.WhatsApp.PairingTimeout, AutoReconnect: cfg.WhatsApp.AutoReconnect,
+		RestoreInterval:             cfg.WhatsApp.RestoreInterval,
 		StartupReconnectConcurrency: cfg.WhatsApp.StartupReconnectConcurrency,
 		ConnectTimeout:              cfg.WhatsApp.ConnectTimeout, ReconnectInitialDelay: cfg.WhatsApp.ReconnectInitialDelay,
 		ReconnectMaxDelay: cfg.WhatsApp.ReconnectMaxDelay, ProfilePictureTimeout: cfg.WhatsApp.ProfilePictureTimeout,

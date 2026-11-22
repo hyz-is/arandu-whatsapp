@@ -92,6 +92,14 @@ type Service struct {
 	pairings           *pairingManager
 	contactSyncMu      sync.Mutex
 	contactSyncCancels map[string]*contactSyncHandle
+
+	// connect opens the WhatsApp connection of a restored client; nil means
+	// the client's own Connect.
+	connect func(*whatsmeow.Client) error
+	// skippedMu guards skipped, the instances whose restore found the
+	// connection lease held by another process and has not succeeded since.
+	skippedMu sync.Mutex
+	skipped   map[string]struct{}
 }
 
 type contactSyncHandle struct {
@@ -132,6 +140,7 @@ func NewService(
 		appCancel:          appCancel,
 		pairings:           newPairingManager(),
 		contactSyncCancels: make(map[string]*contactSyncHandle),
+		skipped:            make(map[string]struct{}),
 	}, nil
 }
 
@@ -161,12 +170,10 @@ func (s *Service) ConnectQRCode(ctx context.Context, grant security.Grant, insta
 
 	if result, handled, err := s.connectExistingSession(ctx, grant, runtimeGrant, instance.Instance, "connect_existing_session"); handled || err != nil {
 		if err == nil {
-			if result.AlreadyConnected {
-				_ = s.lock.Release(context.Background(), grant, instanceID)
-				lockHeld = false
-			} else {
-				lockHeld = false
-			}
+			// The client now registered here, connected or connecting, keeps
+			// the lease: it is what stops another process from connecting the
+			// same session, and the restore supervisor renews it.
+			lockHeld = false
 		}
 		return result, err
 	}
@@ -487,7 +494,17 @@ func (s *Service) Restore(ctx context.Context, grant security.Grant) error {
 	if err != nil {
 		return err
 	}
-	sem := make(chan struct{}, s.config.StartupReconnectConcurrency)
+	return s.restoreInstances(ctx, grant, instances)
+}
+
+// restoreInstances restores the given instances of one tenant, at most
+// StartupReconnectConcurrency at a time, and waits for all of them.
+func (s *Service) restoreInstances(ctx context.Context, grant security.Grant, instances []types.Instance) error {
+	concurrency := s.config.StartupReconnectConcurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	sem := make(chan struct{}, concurrency)
 	done := make(chan struct{}, len(instances))
 	for _, item := range instances {
 		sem <- struct{}{}
@@ -554,10 +571,19 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		s.pairings.cancelAll()
 	}
 	s.cancelAllContactSyncs()
-	for _, client := range s.hub.List() {
-		_ = s.lock.Release(ctx, client.RuntimeGrant, client.InstanceID)
+	clients := s.hub.List()
+	err := s.hub.Shutdown(ctx)
+	// The leases go after the connections: a process that took the instance
+	// over the moment its lease was free would otherwise connect the session
+	// while this one still held it. The release outlives a Close context that
+	// is already done, because a lease left behind keeps the next container
+	// waiting for it to expire.
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), leaseReleaseTimeout)
+	defer cancel()
+	for _, client := range clients {
+		_ = s.lock.Release(releaseCtx, client.RuntimeGrant, client.InstanceID)
 	}
-	return s.hub.Shutdown(ctx)
+	return err
 }
 
 func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item types.Instance) error {
@@ -572,14 +598,19 @@ func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item typ
 	}
 	instanceID := strconv.FormatInt(item.ID, 10)
 	locked, err := s.lock.TryAcquire(ctx, grant, instanceID)
-	if err != nil || !locked {
+	if err != nil {
 		return err
 	}
+	if !locked {
+		s.noteRestoreSkipped(ctx, item)
+		return nil
+	}
 	if err := s.hub.Reserve(instanceID, item.Name); err != nil {
-		_ = s.lock.Release(ctx, grant, instanceID)
 		if existing, ok := s.hub.GetByInstanceID(instanceID); ok && existing != nil {
+			// A client of this process holds the lease; it stays.
 			return s.reconcileInstanceState(ctx, grant, item, existing)
 		}
+		_ = s.lock.Release(ctx, grant, instanceID)
 		if errors.Is(err, ErrConnectionInProgress) {
 			return nil
 		}
@@ -591,6 +622,12 @@ func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item typ
 		_ = s.lock.Release(ctx, grant, instanceID)
 		status := types.InstanceConnectionStatusSessionMissing
 		event := "session_missing"
+		if !errors.Is(err, ErrSessionMissing) {
+			// The store could not be read; the session may well be there, so
+			// the restore supervisor must not treat it as gone.
+			status = types.InstanceConnectionStatusConnectionError
+			event = "restore_device_error"
+		}
 		_ = s.instances.UpdateConnectionState(ctx, grant, types.UpdateConnectionStateInput{
 			InstanceID:          item.ID,
 			ConnectionStatus:    &status,
@@ -629,7 +666,7 @@ func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item typ
 		return err
 	}
 	if client.IsConnected() {
-		_ = s.lock.Release(ctx, grant, instanceID)
+		s.noteRestored(ctx, item)
 		return nil
 	}
 	if client.Store == nil || client.Store.ID == nil {
@@ -646,9 +683,8 @@ func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item typ
 		LastConnectionEvent:     types.OptionalField[string]{Set: true, Value: &event},
 		IncrementAttempts:       true,
 	})
-	if err := client.Connect(); err != nil {
+	if err := s.connectClient(client); err != nil {
 		if errors.Is(err, whatsmeow.ErrAlreadyConnected) {
-			_ = s.lock.Release(ctx, grant, instanceID)
 			return s.reconcileInstanceState(ctx, grant, item, managed)
 		}
 		s.hub.Remove(instanceID)
@@ -664,9 +700,11 @@ func (s *Service) restoreOne(ctx context.Context, grant security.Grant, item typ
 	}
 	select {
 	case <-managed.ConnectedSignal:
+		s.noteRestored(ctx, item)
 		return nil
 	case <-connectCtx.Done():
 		if client.IsConnected() {
+			s.noteRestored(ctx, item)
 			return nil
 		}
 		status := types.InstanceConnectionStatusConnectionTimeout
@@ -1080,7 +1118,6 @@ func (s *Service) registerEventHandlers(managed *ManagedWhatsAppClient, pairingC
 				})
 				s.dispatchConnectionWebhook(eventCtx, managed, webhooksvc.ConnectionInternalConnected, 0, &now, "")
 				managed.SignalConnected()
-				_ = s.lock.Release(eventCtx, managed.RuntimeGrant, managed.InstanceID)
 				go s.refreshProfilePicture(eventCtx, managed)
 				s.startContactSync(managed)
 			}
@@ -1465,10 +1502,11 @@ func (s *Service) consumeQRCodeChannel(
 				managed.Cancel()
 			}
 			s.hub.Remove(managed.InstanceID)
+			_ = s.lock.Release(context.Background(), managed.RuntimeGrant, managed.InstanceID)
 		} else {
+			// The paired client stays in the hub and keeps its lease.
 			s.publishConnectionUpdate(managed, string(types.InstanceConnectionStatusOnline))
 		}
-		_ = s.lock.Release(context.Background(), managed.RuntimeGrant, managed.InstanceID)
 		hlog.For(ctx).DebugContext(ctx, "QR pairing session finished",
 			"component", "whatsapp_service", "instance_id", managed.InstanceID, "instance_name", managed.InstanceName,
 			"success", terminalSuccess, "duration", time.Since(startedAt))

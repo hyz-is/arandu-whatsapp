@@ -88,8 +88,15 @@ type WhatsAppConfig struct {
 	SessionPhoneName string
 	// PairingTimeout bounds one QR, phone-code or Passkey pairing flow.
 	PairingTimeout time.Duration
-	// AutoReconnect restores eligible sessions when the module starts.
+	// AutoReconnect restores eligible sessions when the module starts and keeps
+	// restoring them while it runs.
 	AutoReconnect bool
+	// RestoreInterval is how often, with up to 20% jitter, the module retries
+	// the paired sessions this process holds no connection for (their
+	// connection lease was held by another process, or a connect failed) and
+	// renews the lease of every session it is connected to. Zero uses 30
+	// seconds. It cannot exceed one minute: the lease lasts two.
+	RestoreInterval time.Duration
 	// StartupReconnectConcurrency bounds parallel session restoration.
 	StartupReconnectConcurrency int
 	// ConnectTimeout bounds one WhatsApp connection attempt.
@@ -212,6 +219,7 @@ func (c Config) Validate() error {
 		"WhatsApp.ConnectTimeout":        c.WhatsApp.ConnectTimeout,
 		"WhatsApp.ReconnectInitialDelay": c.WhatsApp.ReconnectInitialDelay,
 		"WhatsApp.ReconnectMaxDelay":     c.WhatsApp.ReconnectMaxDelay,
+		"WhatsApp.RestoreInterval":       c.WhatsApp.RestoreInterval,
 		"WhatsApp.ProfilePictureTimeout": c.WhatsApp.ProfilePictureTimeout,
 		"WhatsApp.AddressCacheTTL":       c.WhatsApp.AddressCacheTTL,
 		"Processing.ProcessingTimeout":   c.Processing.ProcessingTimeout,
@@ -233,6 +241,10 @@ func (c Config) Validate() error {
 	}
 	if c.WhatsApp.QRCodeDarkColor != "" && !hexColor.MatchString(c.WhatsApp.QRCodeDarkColor) {
 		return fmt.Errorf("whatsapp: Config.WhatsApp.QRCodeDarkColor must be #RRGGBB")
+	}
+	if c.WhatsApp.RestoreInterval > internalconfig.MaxRestoreInterval {
+		return fmt.Errorf("whatsapp: Config.WhatsApp.RestoreInterval cannot exceed %s; the connection lease it renews lasts twice as long",
+			internalconfig.MaxRestoreInterval)
 	}
 	if c.WhatsApp.ReconnectInitialDelay > 0 && c.WhatsApp.ReconnectMaxDelay > 0 &&
 		c.WhatsApp.ReconnectMaxDelay < c.WhatsApp.ReconnectInitialDelay {
@@ -299,6 +311,9 @@ func WithDefaults(c Config) Config {
 	}
 	if wa.StartupReconnectConcurrency == 0 {
 		wa.StartupReconnectConcurrency = 5
+	}
+	if wa.RestoreInterval == 0 {
+		wa.RestoreInterval = internalconfig.DefaultRestoreInterval
 	}
 	if wa.ConnectTimeout == 0 {
 		wa.ConnectTimeout = 30 * time.Second
