@@ -436,6 +436,15 @@ func (s *Service) LeaveGroup(ctx context.Context, actor security.Subject, name, 
 	return s.groups.Leave(ctx, grant, name, groupJID)
 }
 
+// ListGroups returns the groups the connected account has joined.
+func (s *Service) ListGroups(ctx context.Context, actor security.Subject, name string) ([]models.GroupSummary, error) {
+	grant, _, err := s.authorizedInstance(ctx, actor, enums.ActionGroupList, name)
+	if err != nil {
+		return nil, err
+	}
+	return s.groups.ListJoined(ctx, grant, name)
+}
+
 func (s *Service) authorizedInstance(ctx context.Context, actor security.Subject, action security.Action, rawName string) (security.Grant, models.Instance, error) {
 	if err := s.checkTenant(actor); err != nil {
 		return security.Grant{}, models.Instance{}, err

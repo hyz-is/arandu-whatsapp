@@ -41,6 +41,7 @@ const (
 	ActionGroupInviteRevoke      security.Action = "whatsapp.group.invite.revoke"
 	ActionGroupParticipantUpdate security.Action = "whatsapp.group.participant.update"
 	ActionGroupLeave             security.Action = "whatsapp.group.leave"
+	ActionGroupList              security.Action = "whatsapp.group.list"
 
 	ActionRuntime security.Action = "whatsapp.runtime"
 	// ActionRuntimeDiscover lists which tenants have instances to reconnect at
@@ -117,6 +118,8 @@ func CheckInstanceLookup(grant security.Grant) error {
 		return grant.Check(ActionGroupParticipantUpdate)
 	case ActionGroupLeave:
 		return grant.Check(ActionGroupLeave)
+	case ActionGroupList:
+		return grant.Check(ActionGroupList)
 	case ActionRuntime:
 		return grant.Check(ActionRuntime)
 	default:
@@ -168,6 +171,8 @@ func CheckInstanceStatus(grant security.Grant) error {
 		return grant.Check(ActionGroupParticipantUpdate)
 	case ActionGroupLeave:
 		return grant.Check(ActionGroupLeave)
+	case ActionGroupList:
+		return grant.Check(ActionGroupList)
 	case ActionRuntime:
 		return grant.Check(ActionRuntime)
 	default:

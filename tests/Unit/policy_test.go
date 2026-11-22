@@ -158,3 +158,30 @@ func TestAnActionListedInPolicyActionsIsDecidedByTheSubjectsOwnActions(t *testin
 		t.Fatal("a guest carrying the action was allowed")
 	}
 }
+
+func TestListGroupsIsRefusedBeforeDatabaseWithoutTheGroupListAction(t *testing.T) {
+	t.Parallel()
+	sessions := security.NewSessionStore([]byte("0123456789abcdef0123456789abcdef"), time.Hour, false, security.NewMemoryBackend())
+	module, err := whatsapp.New(whatsapp.Config{
+		Tenant: "acme",
+		Policy: whatsapp.PolicyConfig{Roles: map[security.Action][]string{
+			whatsapp.ActionGroupLeave: {"admin"},
+		}},
+	}, data.Wrap(nil, data.DialectSQLite), sessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := module.Service().ListGroups(context.Background(), administrator("acme"), "main"); !errors.Is(err, security.ErrForbidden) {
+		t.Fatalf("a role that was not given whatsapp.group.list listed groups: %v", err)
+	}
+	if _, err := module.Service().ListGroups(context.Background(), administrator(""), "main"); !errors.Is(err, security.ErrForbidden) {
+		t.Fatalf("a subject with no tenant listed groups: %v", err)
+	}
+	found := false
+	for _, action := range whatsapp.Actions {
+		found = found || action == whatsapp.ActionGroupList
+	}
+	if !found {
+		t.Fatal("ActionGroupList is not part of the public vocabulary")
+	}
+}

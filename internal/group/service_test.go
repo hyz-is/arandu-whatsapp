@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	httpclient "github.com/arandu-io/hesape/http/client"
+	watypes "go.mau.fi/whatsmeow/types"
 )
 
 func TestGroupImageClientRejectsInternalAddresses(t *testing.T) {
@@ -48,4 +49,32 @@ type groupRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f groupRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func TestGroupSummaryResponsesKeepJIDSubjectAndSizeWithoutParticipants(t *testing.T) {
+	groups := []*watypes.GroupInfo{
+		nil,
+		{
+			JID: watypes.NewJID("120363000000000001", watypes.GroupServer), OwnerPN: watypes.NewJID("5511999990001", watypes.DefaultUserServer),
+			GroupName: watypes.GroupName{Name: "Fornecedores A"}, ParticipantCount: 12,
+			Participants: []watypes.GroupParticipant{{JID: watypes.NewJID("5511999990002", watypes.DefaultUserServer)}},
+		},
+		{
+			JID: watypes.NewJID("120363000000000002", watypes.GroupServer), GroupName: watypes.GroupName{Name: "Sem contagem"},
+			Participants: []watypes.GroupParticipant{{}, {}},
+		},
+	}
+	got := groupSummaryResponses(groups)
+	if len(got) != 2 {
+		t.Fatalf("got %d summaries, want 2: %#v", len(got), got)
+	}
+	if got[0].ID != "120363000000000001@g.us" || got[0].Subject != "Fornecedores A" || got[0].Size != 12 || got[0].Owner != "5511999990001@s.whatsapp.net" {
+		t.Fatalf("unexpected first summary %#v", got[0])
+	}
+	if got[1].Size != 2 {
+		t.Fatalf("a group with no count must fall back to its participants: %#v", got[1])
+	}
+	if empty := groupSummaryResponses(nil); empty == nil || len(empty) != 0 {
+		t.Fatalf("no groups must answer an empty list, got %#v", empty)
+	}
 }

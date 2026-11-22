@@ -61,6 +61,7 @@ const (
 	ActionGroupInviteRevoke      security.Action = enums.ActionGroupInviteRevoke
 	ActionGroupParticipantUpdate security.Action = enums.ActionGroupParticipantUpdate
 	ActionGroupLeave             security.Action = enums.ActionGroupLeave
+	ActionGroupList              security.Action = enums.ActionGroupList
 )
 
 // ActionRuntime identifies the internal permission used by background work.

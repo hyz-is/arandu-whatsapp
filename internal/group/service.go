@@ -39,6 +39,7 @@ type Service interface {
 	RevokeInviteCode(ctx context.Context, grant security.Grant, instanceName string, groupJID string) error
 	UpdateParticipant(ctx context.Context, grant security.Grant, instanceName string, groupJID string, input UpdateParticipantRequest) error
 	Leave(ctx context.Context, grant security.Grant, instanceName string, groupJID string) error
+	ListJoined(ctx context.Context, grant security.Grant, instanceName string) ([]SummaryResponse, error)
 }
 
 type GroupService struct {
@@ -180,6 +181,21 @@ func (s *GroupService) Leave(ctx context.Context, grant security.Grant, instance
 	}
 	s.logOperation(ctx, instance, "leave", jid.String())
 	return nil
+}
+
+// ListJoined returns every group the connected account has joined, from the
+// WhatsApp server, with the participant count and without the participants.
+func (s *GroupService) ListJoined(ctx context.Context, grant security.Grant, instanceName string) ([]SummaryResponse, error) {
+	instance, client, err := s.authorizedClient(ctx, grant, instanceName)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := client.GetJoinedGroups(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRemoteOperation, err)
+	}
+	s.logOperation(ctx, instance, "list", "")
+	return groupSummaryResponses(groups), nil
 }
 
 func (s *GroupService) authorizedGroup(ctx context.Context, grant security.Grant, instanceName string, rawGroupJID string) (dbtypes.Instance, *whatsmeow.Client, watypes.JID, error) {
@@ -395,6 +411,28 @@ func groupInfoResponse(info *watypes.GroupInfo) InfoResponse {
 		MemberAddMode:       info.MemberAddMode == watypes.GroupMemberAddModeAdmin,
 		Participants:        participants,
 	}
+}
+
+func groupSummaryResponses(groups []*watypes.GroupInfo) []SummaryResponse {
+	out := make([]SummaryResponse, 0, len(groups))
+	for _, info := range groups {
+		if info == nil {
+			continue
+		}
+		size := info.ParticipantCount
+		if size == 0 {
+			size = len(info.Participants)
+		}
+		out = append(out, SummaryResponse{
+			ID:          jidString(info.JID),
+			Subject:     info.Name,
+			Size:        size,
+			Owner:       firstJIDString(info.OwnerJID, info.OwnerPN),
+			Creation:    unix(info.GroupCreated),
+			IsCommunity: info.IsParent,
+		})
+	}
+	return out
 }
 
 func participantResponse(participant watypes.GroupParticipant) ParticipantResponse {

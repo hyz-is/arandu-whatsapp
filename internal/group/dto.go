@@ -20,6 +20,17 @@ type InviteCodeResponse struct {
 	Invitation string `json:"invitation"`
 }
 
+// SummaryResponse is one group the connected account has joined, without its
+// participant list.
+type SummaryResponse struct {
+	ID          string `json:"id"`
+	Subject     string `json:"subject"`
+	Size        int    `json:"size"`
+	Owner       string `json:"owner,omitempty"`
+	Creation    int64  `json:"creation,omitempty"`
+	IsCommunity bool   `json:"isCommunity"`
+}
+
 type InfoResponse struct {
 	ID                  string                `json:"id"`
 	Subject             string                `json:"subject"`

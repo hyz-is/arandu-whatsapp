@@ -62,6 +62,9 @@ type MediaMetadata = chat.MediaMetadata
 // GroupInfo describes a WhatsApp group.
 type GroupInfo = group.InfoResponse
 
+// GroupSummary describes one group the connected account has joined.
+type GroupSummary = group.SummaryResponse
+
 // GroupParticipant describes one group participant.
 type GroupParticipant = group.ParticipantResponse
 

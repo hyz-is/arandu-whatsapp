@@ -204,6 +204,12 @@ func (s *Service) CreateGroup(ctx context.Context, actor security.Subject, name 
 	return s.native.CreateGroup(ctx, actor, name, input)
 }
 
+// ListGroups returns the groups the connected account has joined: JID,
+// subject and participant count, without the participants.
+func (s *Service) ListGroups(ctx context.Context, actor security.Subject, name string) ([]GroupSummaryResponse, error) {
+	return s.native.ListGroups(ctx, actor, name)
+}
+
 // UpdateGroupPicture replaces a group profile picture.
 func (s *Service) UpdateGroupPicture(ctx context.Context, actor security.Subject, name string, input GroupUpdatePictureRequest) (GroupInfoResponse, error) {
 	return s.native.UpdateGroupPicture(ctx, actor, name, input)

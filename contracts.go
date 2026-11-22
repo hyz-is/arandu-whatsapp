@@ -212,6 +212,9 @@ type GroupParticipantResponse = group.ParticipantResponse
 // GroupUpdatePictureRequest is the input for replacing a group picture.
 type GroupUpdatePictureRequest = group.UpdatePictureRequest
 
+// GroupSummaryResponse describes one group the connected account has joined.
+type GroupSummaryResponse = group.SummaryResponse
+
 // GroupInviteCodeResponse describes a group's active invite code.
 type GroupInviteCodeResponse = group.InviteCodeResponse
 

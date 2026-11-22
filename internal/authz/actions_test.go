@@ -23,7 +23,7 @@ func TestWritesNamesEveryReadingActionAndNothingElse(t *testing.T) {
 		ActionMessageEdit, ActionMessageMediaDownload,
 		ActionContactCheck, ActionChatArchive, ActionProfilePictureView, ActionCallReject,
 		ActionGroupCreate, ActionGroupPictureUpdate, ActionGroupInviteView,
-		ActionGroupInviteRevoke, ActionGroupParticipantUpdate, ActionGroupLeave,
+		ActionGroupInviteRevoke, ActionGroupParticipantUpdate, ActionGroupLeave, ActionGroupList,
 		ActionRuntime, ActionRuntimeDiscover,
 	}
 	for action := range reads {
@@ -36,7 +36,7 @@ func TestWritesNamesEveryReadingActionAndNothingElse(t *testing.T) {
 			t.Errorf("Writes(%q) = false, want true: the action may write", action)
 		}
 	}
-	if got := len(reads) + len(writes); got != 28 {
-		t.Errorf("the table covers %d actions, want 28: place a new action in it", got)
+	if got := len(reads) + len(writes); got != 29 {
+		t.Errorf("the table covers %d actions, want 29: place a new action in it", got)
 	}
 }

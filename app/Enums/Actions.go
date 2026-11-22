@@ -55,6 +55,7 @@ const (
 	ActionGroupInviteRevoke      security.Action = authz.ActionGroupInviteRevoke
 	ActionGroupParticipantUpdate security.Action = authz.ActionGroupParticipantUpdate
 	ActionGroupLeave             security.Action = authz.ActionGroupLeave
+	ActionGroupList              security.Action = authz.ActionGroupList
 )
 
 // ActionRuntime identifies the internal permission used by background work.
@@ -72,6 +73,7 @@ var publicActions = [...]security.Action{
 	ActionMessageEdit, ActionMessageMediaDownload, ActionContactCheck, ActionChatArchive,
 	ActionProfilePictureView, ActionCallReject, ActionGroupCreate, ActionGroupPictureUpdate,
 	ActionGroupInviteView, ActionGroupInviteRevoke, ActionGroupParticipantUpdate, ActionGroupLeave,
+	ActionGroupList,
 }
 
 // Actions is a snapshot of the complete public permission vocabulary.
