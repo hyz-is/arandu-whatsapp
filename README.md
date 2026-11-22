@@ -216,7 +216,7 @@ migrations.
 | --- | --- | --- |
 | `Tenant` | yes | guest realm and the tenant boot discovery runs under; the module serves every tenant. |
 | `Prefix` | no | where the routes are mounted. Defaults to `/whatsapp`. |
-| `WhatsApp` | no | pairing, device identity, reconnect and address-cache settings. |
+| `WhatsApp` | no | pairing, device identity, reconnect (including `RestoreInterval`, the restore and lease-renewal period) and address-cache settings. |
 | `Persistence` | no | enables persistence of messages, updates and contacts. |
 | `Webhooks` | no | signed global/instance delivery, retention and native database queue. |
 | `Processing` | no | mention-all operation timeouts and recoverable snapshot retention; worker concurrency belongs to `aru queue:work`. |
@@ -305,7 +305,26 @@ request while declaring `network = false` is rejected.
 - `Boot` configures the process-wide WhatsMeow device descriptor.
 - `Start` verifies schema state, discovers the tenants with paired instances
   and restores each tenant's connections under its own Grant, asynchronously.
-- `Health` checks the borrowed database and connection-restore result.
+  Without the schema it still boots: it logs the error, `Available` returns
+  `ErrSchemaUnavailable`, operations are refused and the schema is rechecked
+  until `aru migrate` has run (see `docs/migrations.md`).
+- Restore does not stop at boot. While the module runs, a supervisor tries every
+  `WhatsApp.RestoreInterval` (30 seconds by default, with jitter) the paired
+  instances this process holds no client for, so a session whose lease another
+  container held at boot is connected as soon as that container lets go or its
+  lease expires. It only reconnects a device WhatsApp already knows: it never
+  pairs, never asks for a QR code, and skips instances stored as `logged_out`
+  or `session_missing`.
+- Each instance has a connection lease in the database (`connection_lock_*`,
+  two minutes). The process that connects a session holds the lease for as long
+  as it holds the client and renews it every `RestoreInterval`; that is what
+  keeps two containers, such as a start-first deploy, from connecting the same
+  session. A restore that finds the lease held is logged and retried. `Close`
+  disconnects the clients and then releases their leases, so the next container
+  takes over at once; a process killed without closing hands over when the lease
+  expires.
+- `Health` checks the borrowed database and the connection-restore result,
+  which clears when a later restore pass succeeds.
 - `Close` stops module-owned work and disconnects managed clients. The host
   application owns all native queue workers.
 

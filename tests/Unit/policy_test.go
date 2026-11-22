@@ -117,6 +117,8 @@ func TestConfigurationValidationAndDefaults(t *testing.T) {
 		{Tenant: "acme", Webhooks: whatsapp.WebhookConfig{Retention: -time.Second}},
 		{Tenant: "acme", Webhooks: whatsapp.WebhookConfig{GlobalURL: "https://example.com/" + strings.Repeat("x", 500)}},
 		{Tenant: "acme", Processing: whatsapp.ProcessingConfig{SendTimeout: -time.Second}},
+		{Tenant: "acme", WhatsApp: whatsapp.WhatsAppConfig{RestoreInterval: -time.Second}},
+		{Tenant: "acme", WhatsApp: whatsapp.WhatsAppConfig{RestoreInterval: 61 * time.Second}},
 		{Tenant: "acme", Policy: whatsapp.PolicyConfig{Roles: map[security.Action][]string{"other.read": {"admin"}}}},
 		{Tenant: "acme", Policy: whatsapp.PolicyConfig{Roles: map[security.Action][]string{whatsapp.ActionInstanceView: {""}}}},
 	}
@@ -127,6 +129,9 @@ func TestConfigurationValidationAndDefaults(t *testing.T) {
 	}
 	if err := (whatsapp.Config{Tenant: "acme"}).Validate(); err != nil {
 		t.Fatalf("valid config was refused: %v", err)
+	}
+	if err := (whatsapp.Config{Tenant: "acme", WhatsApp: whatsapp.WhatsAppConfig{RestoreInterval: time.Minute}}).Validate(); err != nil {
+		t.Fatalf("a one minute restore interval was refused: %v", err)
 	}
 }
 

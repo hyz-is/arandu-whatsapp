@@ -3,16 +3,19 @@ package whatsapp
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/arandu-io/framework/data"
 	"github.com/arandu-io/framework/foundation"
 	fhttp "github.com/arandu-io/framework/http"
 	"github.com/arandu-io/framework/security"
 	"github.com/arandu-io/hesape/cache"
+	hlog "github.com/arandu-io/hesape/log"
 	"github.com/arandu-io/hesape/queue"
 	swagger "github.com/hyz-is/arandu-swagger"
 
@@ -55,10 +58,21 @@ type Module struct {
 	lifecycle   context.Context
 	cancel      context.CancelFunc
 	restoreDone chan struct{}
+	leaseDone   chan struct{}
 	restoreErr  error
 	started     bool
 	closed      bool
+
+	// unavailable is why the module cannot serve yet: the schema is not
+	// migrated. Nil once it is. schemaRetry is how often Start's background
+	// goroutine looks again while it is not.
+	unavailable error
+	schemaRetry time.Duration
 }
+
+// defaultSchemaRetry is how often a module that booted before `aru migrate` ran
+// checks for its schema.
+const defaultSchemaRetry = 15 * time.Second
 
 var (
 	_ foundation.Module     = (*Module)(nil)
@@ -170,14 +184,17 @@ func newModule(cfg Config, db *data.DB, sessions *security.SessionStore, docs sw
 	controller := controllers.NewWhatsAppController(appCfg, service, sessions)
 	publicService := wrapService(service)
 
-	return &Module{
+	module := &Module{
 		cfg: cfg, db: db, sessions: sessions, logger: logger, docs: docs,
 		service:          service,
 		publicService:    publicService,
 		controller:       controller,
 		webhookManager:   webhookManager,
 		messageProcessor: processor, connections: connections,
-	}, nil
+		schemaRetry: defaultSchemaRetry,
+	}
+	service.SetAvailability(module.Available)
+	return module, nil
 }
 
 // Name is the stable module identifier used by Arandu route tooling.
@@ -217,9 +234,21 @@ func (m *Module) Boot(context.Context) error {
 	}, m.logger)
 }
 
-// Start verifies that migrations were applied. Connection restoration runs
-// asynchronously and its terminal error is reported by Health. Durable jobs
-// are owned by the host queue worker.
+// Start verifies that migrations were applied and, when they were, restores the
+// paired connections asynchronously; the terminal error of that restoration is
+// reported by Health. Durable jobs are owned by the host queue worker.
+//
+// A schema that is not migrated yet does not stop the process. A new image can
+// boot before `aru migrate` has run, and a module that refused to start took the
+// whole application down with it (a four-minute outage in production). Start
+// logs the error, the module reports itself through Available and answers every
+// operation with ErrSchemaUnavailable, and a background goroutine looks again
+// every few seconds, restoring the connections once the schema appears. Health
+// stays nil: readiness is the application's, and an optional capability that has
+// not been migrated must not make the rest of it unready.
+//
+// A closed database or disabled SQLite foreign keys are configuration errors,
+// not a pending migration, and still fail Start.
 func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -235,11 +264,17 @@ func (m *Module) Start(ctx context.Context) error {
 	if err := m.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("whatsapp: database health check: %w", err)
 	}
-	if err := m.verifyWhatsMeowSchema(ctx); err != nil {
+	if err := m.verifyForeignKeys(ctx); err != nil {
 		return err
 	}
+	schemaErr := m.verifySchema(ctx)
+	if schemaErr != nil {
+		m.unavailable = schemaErr
+		m.logger.Error("WhatsApp is unavailable until the schema is migrated; run `aru migrate`",
+			"component", "whatsapp", "error", schemaErr)
+	}
 
-	lifecycle, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	lifecycle, cancel := context.WithCancel(hlog.Into(context.WithoutCancel(ctx), m.logger))
 	// Discovery reads which tenants have instances to reconnect, and nothing
 	// else; each one is restored under its own runtime Grant (RestoreAll).
 	//arandu:system-grant module startup lists the tenants whose paired instances it reconnects
@@ -248,41 +283,111 @@ func (m *Module) Start(ctx context.Context) error {
 	m.lifecycle = lifecycle
 	m.cancel = cancel
 	m.restoreDone = make(chan struct{})
+	m.leaseDone = make(chan struct{})
 	m.started = true
-	go m.restore(lifecycle, runtimeGrant, m.restoreDone)
+	go func(done chan struct{}) {
+		defer close(done)
+		m.connections.HoldLeases(lifecycle)
+	}(m.leaseDone)
+	go m.run(lifecycle, runtimeGrant, m.restoreDone, schemaErr != nil)
 	return nil
 }
 
-func (m *Module) verifyWhatsMeowSchema(ctx context.Context) error {
-	if m.db.Dialect() == data.DialectSQLite {
-		var enabled int
-		if err := m.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&enabled); err != nil {
-			return fmt.Errorf("whatsapp: verify SQLite foreign keys: %w", err)
-		}
-		if enabled != 1 {
-			return errors.New("whatsapp: SQLite foreign keys are disabled; enable them before starting the module")
-		}
+// Available answers nil when the module can serve, and otherwise why it cannot:
+// an error matching ErrSchemaUnavailable until `aru migrate` has run. It is
+// cheap and safe to call from a request, a health page or a login screen.
+func (m *Module) Available() error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.unavailable
+}
+
+func (m *Module) verifyForeignKeys(ctx context.Context) error {
+	if m.db.Dialect() != data.DialectSQLite {
+		return nil
+	}
+	var enabled int
+	if err := m.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&enabled); err != nil {
+		return fmt.Errorf("whatsapp: verify SQLite foreign keys: %w", err)
+	}
+	if enabled != 1 {
+		return errors.New("whatsapp: SQLite foreign keys are disabled; enable them before starting the module")
+	}
+	return nil
+}
+
+// verifySchema answers nil when the module's tables and the WhatsMeow store
+// exist and the store has an applied version, and an error matching
+// ErrSchemaUnavailable otherwise.
+func (m *Module) verifySchema(ctx context.Context) error {
+	var one int
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT 1 FROM whatsapp_instances LIMIT 1`).Scan(&one); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: whatsapp_instances: %w", ErrSchemaUnavailable, err)
 	}
 	var version int
 	if err := m.db.QueryRowContext(ctx,
 		`SELECT version FROM whatsmeow_version LIMIT 1`).Scan(&version); err != nil {
-		return fmt.Errorf("whatsapp: WhatsMeow schema is unavailable; run `aru migrate`: %w", err)
+		return fmt.Errorf("%w: whatsmeow_version: %w", ErrSchemaUnavailable, err)
 	}
 	if version < 1 {
-		return errors.New("whatsapp: WhatsMeow schema has no applied version; run `aru migrate`")
+		return fmt.Errorf("%w: the WhatsMeow store has no applied version", ErrSchemaUnavailable)
 	}
 	return nil
 }
 
-func (m *Module) restore(ctx context.Context, grant security.Grant, done chan struct{}) {
+// run waits for the schema when Start found it missing, restores the
+// connections, and then keeps restoring the ones this process could not take,
+// until the module closes. It owns done and closes it when it returns.
+func (m *Module) run(ctx context.Context, grant security.Grant, done chan struct{}, waitForSchema bool) {
 	defer close(done)
+	if waitForSchema && !m.awaitSchema(ctx) {
+		return
+	}
+	m.restore(ctx, grant)
+	m.connections.Supervise(ctx, grant, m.reportRestore)
+}
+
+// awaitSchema checks for the schema every schemaRetry until it appears and
+// answers true, or until the module closes and answers false.
+func (m *Module) awaitSchema(ctx context.Context) bool {
+	ticker := time.NewTicker(m.schemaRetry)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
+		if err := m.verifySchema(ctx); err != nil {
+			continue
+		}
+		m.mu.Lock()
+		m.unavailable = nil
+		m.mu.Unlock()
+		m.logger.Info("WhatsApp schema is migrated; the module is available", "component", "whatsapp")
+		return true
+	}
+}
+
+func (m *Module) restore(ctx context.Context, grant security.Grant) {
 	err := m.connections.RestoreAll(ctx, grant)
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}
+	m.reportRestore(err)
+}
+
+// reportRestore records the outcome of a restore for Health: an error until a
+// later pass succeeds.
+func (m *Module) reportRestore(err error) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err == nil {
+		m.restoreErr = nil
+		return
+	}
 	m.restoreErr = fmt.Errorf("restore WhatsApp connections: %w", err)
-	m.mu.Unlock()
 }
 
 // Health checks only module-owned runtime state and the borrowed database. It
@@ -315,15 +420,19 @@ func (m *Module) Close(ctx context.Context) error {
 	m.closed = true
 	cancel := m.cancel
 	done := m.restoreDone
+	leaseDone := m.leaseDone
 	m.mu.Unlock()
 
 	if cancel != nil {
 		cancel()
 	}
 	var errs []error
-	if done != nil {
+	for _, finished := range []chan struct{}{done, leaseDone} {
+		if finished == nil {
+			continue
+		}
 		select {
-		case <-done:
+		case <-finished:
 		case <-ctx.Done():
 			errs = append(errs, ctx.Err())
 		}
@@ -359,6 +468,7 @@ func internalWhatsAppConfig(cfg appconfig.Config) internalconfig.WhatsAppConfig 
 		QRCodeLightColor: cfg.WhatsApp.QRCodeLightColor, QRCodeDarkColor: cfg.WhatsApp.QRCodeDarkColor,
 		SessionPhoneClient: cfg.WhatsApp.SessionPhoneClient, SessionPhoneName: cfg.WhatsApp.SessionPhoneName,
 		PairingTimeout: cfg.WhatsApp.PairingTimeout, AutoReconnect: cfg.WhatsApp.AutoReconnect,
+		RestoreInterval:             cfg.WhatsApp.RestoreInterval,
 		StartupReconnectConcurrency: cfg.WhatsApp.StartupReconnectConcurrency,
 		ConnectTimeout:              cfg.WhatsApp.ConnectTimeout, ReconnectInitialDelay: cfg.WhatsApp.ReconnectInitialDelay,
 		ReconnectMaxDelay: cfg.WhatsApp.ReconnectMaxDelay, ProfilePictureTimeout: cfg.WhatsApp.ProfilePictureTimeout,

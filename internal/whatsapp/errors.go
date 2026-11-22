@@ -10,6 +10,7 @@ var (
 	ErrPairingFailed        = errors.New("whatsapp pairing failed")
 	ErrClientOutdated       = errors.New("whatsapp client outdated")
 	ErrWhatsAppUnavailable  = errors.New("whatsapp unavailable")
+	ErrSchemaUnavailable    = errors.New("whatsapp schema unavailable; run `aru migrate`")
 	ErrInvalidPhoneNumber   = errors.New("invalid phone number")
 	ErrSessionMissing       = errors.New("session missing")
 	ErrClientNotConnected   = errors.New("client not connected")
